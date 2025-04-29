@@ -37,9 +37,7 @@ else
   echo "Quotes file already exists: $QUOTES_FILE"
 fi
 
-# =================================================
 # Create default settings.conf if it doesn't exist
-# =================================================
 SETTINGS_FILE="$JOURNAL_DIR/config/settings.conf"
 if [[ ! -f "$SETTINGS_FILE" ]]; then
   echo "Creating default settings file: $SETTINGS_FILE"
@@ -62,9 +60,7 @@ else
   echo "Settings file already exists: $SETTINGS_FILE"
 fi
 
-# =================================================
 # Create empty security.conf file for future use
-# =================================================
 SECURITY_FILE="$JOURNAL_DIR/config/security.conf"
 if [[ ! -f "$SECURITY_FILE" ]]; then
   echo "Creating security configuration file: $SECURITY_FILE"
@@ -80,6 +76,7 @@ else
   echo "Security file already exists: $SECURITY_FILE"
 fi
 
+# Copy journal_main.sh to bin directory if it exists
 MAIN_SCRIPT="./src/bin/journal_main.sh"
 DEST_SCRIPT="$JOURNAL_DIR/bin/journal_main.sh"
 
@@ -92,18 +89,62 @@ else
   echo "Please create the script file first."
 fi
 
-# =================================================
-# Run Zsh integration script if it exists
-# =================================================
-ZSH_INTEGRATION="./src/zsh_integration.sh"
-if [[ -f "$ZSH_INTEGRATION" ]]; then
+# Check if Zsh integration already exists
+if ! grep -q "# Journash Integration" "$HOME/.zshrc"; then
   echo "Setting up Zsh integration..."
-  chmod +x "$ZSH_INTEGRATION"
-  "$ZSH_INTEGRATION"
+  
+  # Add integration to zshrc
+  cat >> "$HOME/.zshrc" << EOF
+
+# Journash Integration
+# Function to allow 'journash' command
+function journash() {
+  "$JOURNAL_DIR/bin/journal_main.sh" "\$@"
+}
+
+# IDE wrapper function for auto-journaling
+function code_journal() {
+  /usr/bin/code "\$@"
+  journash --post-ide
+}
+# End Journash Integration
+EOF
+
+  echo "✅ Zsh integration complete!"
+  echo "Please restart your terminal or run 'source ~/.zshrc' to apply changes."
 else
-  echo "Warning: Zsh integration script not found at $ZSH_INTEGRATION"
-  echo "Please create the script file first."
+  echo "Journash integration already exists in ~/.zshrc"
 fi
 
-echo "✅ Directory structure setup complete!"
-echo "Next steps: Creating configuration files..."
+# Create a sample journal entry for testing if no entries exist
+if [[ ! -f "$JOURNAL_DIR/data/$(date +%Y-%m).md" ]]; then
+  echo "Creating a sample journal entry for testing..."
+  
+  # Format the current month and year
+  MONTH_YEAR=$(date +"%B %Y")
+  
+  # Create the file with a header
+  cat > "$JOURNAL_DIR/data/$(date +%Y-%m).md" << EOF
+# Journal Entries for $MONTH_YEAR
+
+## Personal Reflection - $(date +"%Y-%m-%d %H:%M")
+
+**Grateful for**: 
+Welcome to Journash! This is a sample entry to help you get started.
+
+**Accomplished**: 
+Successfully set up Journash, a CLI journaling system for tracking your coding journey.
+
+**Thoughts**: 
+This is just the beginning. Use 'journash help' to see all available commands.
+
+---
+
+EOF
+
+  echo "Sample entry created."
+fi
+
+echo "✅ Journash setup complete!"
+echo "You can now use 'journash' to create journal entries."
+echo "Try 'journash help' to see all available commands."
