@@ -265,47 +265,76 @@ function view_month() {
       # Copy original file to temp file
       cp "$file_path" "$temp_file"
       
-      # Find all encrypted entries
-      local encrypted_blocks=$(grep -n "<!-- ENCRYPTED ENTRY -->" "$temp_file" | cut -d: -f1)
+      # Get password once
+      echo "Please enter your encryption password:"
+      read -s password
       
-      if [[ -n "$encrypted_blocks" ]]; then
-        # Get password once
-        echo "Please enter your encryption password:"
-        read -s password
+      # Find all encrypted entries - use a more reliable approach
+      grep -n "<!-- ENCRYPTED ENTRY -->" "$temp_file" | while IFS=: read -r line_num marker; do
+        # Calculate start and end lines more carefully
+        local start_line=$((line_num + 1))
         
-        # Process each encrypted block
-        for line_num in $encrypted_blocks; do
-          # Extract the encrypted content (starts after marker, ends before next entry or EOF)
-          local start_line=$((line_num + 1))
-          local end_line=$(grep -n "^## " "$temp_file" | awk -F: -v start="$start_line" '$1 > start {print $1; exit}')
+        # Find the next entry marker or end of file
+        local next_marker=$(tail -n +$((start_line)) "$temp_file" | grep -n "^## \|<!-- ENCRYPTED ENTRY -->" | head -1)
+        
+        if [[ -n "$next_marker" ]]; then
+          # Extract line number of the next marker relative to start_line
+          local relative_lines=$(echo "$next_marker" | cut -d: -f1)
+          local end_line=$((start_line + relative_lines - 1))
+        else
+          # If no next marker, go to end of file
+          end_line=$(wc -l < "$temp_file")
+        fi
+        
+        # Extract the encrypted content
+        local encrypted_content=$(sed -n "${start_line},${end_line}p" "$temp_file")
+        
+        # Trim any leading/trailing whitespace
+        encrypted_content=$(echo "$encrypted_content" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+        
+        if [[ -n "$encrypted_content" ]]; then
+          # Attempt to decrypt the content
+          local decrypted_content=$("$SECURITY_SCRIPT" decrypt "$encrypted_content" 2>/dev/null)
+          local decrypt_status=$?
           
-          if [[ -z "$end_line" ]]; then
-            end_line=$(wc -l < "$temp_file")
-          else
+          if [[ $decrypt_status -eq 0 && -n "$decrypted_content" ]]; then
+            # Success - replace content in the temp file
+            # First, remove encryption marker
+            sed -i.bak "${line_num}d" "$temp_file"
+            
+            # Now replace encrypted content with decrypted
+            # Using a temporary replacement file to avoid sed issues with newlines
+            local replace_file=$(mktemp)
+            echo "$decrypted_content" > "$replace_file"
+            
+            # Adjust line numbers after deletion of marker
+            start_line=$((start_line - 1))
             end_line=$((end_line - 1))
-          fi
-          
-          local encrypted_content=$(sed -n "${start_line},${end_line}p" "$temp_file")
-          
-          # Decrypt the content
-          local decrypted_content=$("$SECURITY_SCRIPT" decrypt "$encrypted_content")
-          
-          if [[ $? -eq 0 ]]; then
-            # Replace the encrypted content with decrypted in the temp file
-            # This is a simplified approach - in a real implementation, you'd need more robust file handling
-            sed -i.bak "${line_num}d" "$temp_file" # Remove encryption marker
+            
+            # Delete encrypted content lines
+            sed -i.bak "${start_line},${end_line}d" "$temp_file"
+            
+            # Insert decrypted content
+            sed -i.bak "${start_line}r $replace_file" "$temp_file"
+            
+            # Clean up
+            rm "$replace_file"
+          else
+            # Decryption failed - replace with a message
+            sed -i.bak "${line_num}c\\
+<!-- ENCRYPTED ENTRY (Decryption failed) -->" "$temp_file"
             sed -i.bak "${start_line},${end_line}c\\
-$decrypted_content" "$temp_file"
+*This entry could not be decrypted. The password may be incorrect.*" "$temp_file"
           fi
-        done
-        
-        # View the decrypted file
-        less -R "$temp_file"
-        
-        # Clean up
-        rm "$temp_file"
-        return 0
-      fi
+        fi
+      done
+      
+      # View the modified file
+      less -R "$temp_file"
+      
+      # Clean up
+      rm "$temp_file" "$temp_file.bak" 2>/dev/null
+      return 0
     fi
   fi
   
