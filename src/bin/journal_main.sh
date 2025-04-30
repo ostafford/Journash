@@ -14,7 +14,6 @@ SETTINGS_FILE="$CONFIG_DIR/settings.conf"
 SECURITY_FILE="$CONFIG_DIR/security.conf"
 GIT_CONFIG_FILE="$CONFIG_DIR/git.conf"
 UTILS_SCRIPT="$BIN_DIR/journal_utils.sh"
-QUOTE_SCRIPT="$BIN_DIR/quote_manager.sh"
 SECURITY_SCRIPT="$BIN_DIR/journal_security.sh"
 GIT_SCRIPT="$BIN_DIR/journal_git.sh"
 
@@ -184,13 +183,6 @@ function create_journal_entry() {
   if [[ "$GIT_ENABLED" == "true" && "$GIT_AUTO_COMMIT" == "true" && -f "$GIT_SCRIPT" ]]; then
     echo "Committing changes to git repository..."
     "$GIT_SCRIPT" commit
-  fi
-  
-  # Show a random quote after journaling if quotes are enabled
-  if [[ "$QUOTES_ENABLED" == "true" && -f "$QUOTE_SCRIPT" ]]; then
-    echo ""
-    echo "Here's an inspirational quote for you:"
-    "$QUOTE_SCRIPT" random
   fi
 }
 
@@ -528,16 +520,6 @@ elif [[ "$1" == "search" && -n "$2" ]]; then
 elif [[ "$1" == "stats" ]]; then
   # Direct stats command
   show_stats
-elif [[ "$1" == "quote" ]]; then
-  # Quote system commands
-  if [[ -f "$QUOTE_SCRIPT" ]]; then
-    # Pass all arguments to the quote script
-    shift  # Remove the "quote" argument
-    "$QUOTE_SCRIPT" "$@"
-  else
-    echo "Quote manager not found. Please run setup script first."
-    exit 1
-  fi
 elif [[ "$1" == "security" ]]; then
   # Security and encryption commands
   if [[ -f "$SECURITY_SCRIPT" ]]; then
@@ -584,7 +566,6 @@ elif [[ "$1" == "help" || "$1" == "--help" ]]; then
   echo "  view YYYY-MM       View entries for specific month"
   echo "  search TERM        Search for a term across all entries"
   echo "  stats              Show journal statistics"
-  echo "  quote              Manage inspirational quotes"
   echo "  security           Manage encryption for private entries"
   echo "  git                Manage git repository for backups"
   echo "  test               Test system compatibility"
@@ -596,7 +577,6 @@ elif [[ "$1" == "help" || "$1" == "--help" ]]; then
   echo "  journash view                # List all available journals"
   echo "  journash view 04-2025        # View entries from April 2025"
   echo "  journash search \"python\"     # Search for entries containing 'python'"
-  echo "  journash quote add           # Add a new quote"
   echo "  journash security setup      # Set up encryption for private entries"
   echo "  journash git init            # Initialize git repository for backups"
   exit 0

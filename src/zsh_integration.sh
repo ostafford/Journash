@@ -44,8 +44,29 @@ function journash() {
   
 # IDE wrapper function for auto-journaling
 function code_journal() {
-  /usr/bin/code "\$@"
-  journash --post-ide
+  # Run the IDE opening and journal process in the background
+  (
+    # Open Cursor with the --wait flag to block until it closes
+    cursor --wait "$@"
+    
+    # After Cursor closes, open a new iTerm window with colors
+    osascript -e '
+      tell application "iTerm"
+        create window with default profile
+        tell current window
+          tell current session
+            # Use proper escaping for both AppleScript and shell
+            write text "clear && echo \"\\033[1;36m=============================\\033[0m\" && echo \"\\033[1;32m ✨ Coding session completed\\033[0m\" && echo \"\\033[1;36m=============================\\033[0m\" && echo \"\" && journash --post-ide"
+          end tell
+        end tell
+      end tell
+    '
+  ) &
+  
+  # Disown the process so it continues running even if terminal is closed
+  disown
+  
+  echo "IDE launched in background. Journal entry will be prompted when IDE closes."
 }
 # End Journash Integration
 

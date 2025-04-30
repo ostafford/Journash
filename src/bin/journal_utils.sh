@@ -49,28 +49,6 @@ function format_month() {
   fi
 }
 
-# Show system notification based on OS
-function show_notification() {
-  local title=$1
-  local message=$2
-  local os=$(detect_os)
-  
-  if [[ "$os" == "macos" ]]; then
-    # macOS notification
-    osascript -e "display notification \"$message\" with title \"$title\""
-  elif [[ "$os" == "linux" ]]; then
-    # Linux notification (works on most desktop environments)
-    if command -v notify-send &> /dev/null; then
-      notify-send "$title" "$message"
-    else
-      echo "$title: $message" # Fallback to console
-    fi
-  else
-    # Fallback to console
-    echo "$title: $message"
-  fi
-}
-
 # Check if a command exists
 function command_exists() {
   command -v "$1" &> /dev/null
@@ -127,26 +105,6 @@ function test_compatibility() {
       all_commands_available=false
     fi
   done
-  
-  # Test notification system
-  echo "Testing notification system..."
-  if [[ "$os" == "macos" ]]; then
-    if command_exists osascript; then
-      echo "✅ Notification system: Available"
-      show_notification "Journash Test" "Notification system is working!"
-    else
-      echo "❌ Notification system: Not available"
-    fi
-  elif [[ "$os" == "linux" ]]; then
-    if command_exists notify-send; then
-      echo "✅ Notification system: Available"
-      show_notification "Journash Test" "Notification system is working!"
-    else
-      echo "❌ Notification system: Not available"
-    fi
-  else
-    echo "❓ Notification system: Unknown"
-  fi
   
   # Test date formatting
   echo "Testing date formatting..."

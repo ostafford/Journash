@@ -26,24 +26,6 @@ for dir in "bin" "data" "config"; do
   fi
 done
 
-# Create empty quotes file if it doesn't exist
-QUOTES_FILE="$JOURNAL_DIR/data/quotes.txt"
-if [[ ! -f "$QUOTES_FILE" ]]; then
-  echo "Creating empty quotes file: $QUOTES_FILE"
-  touch "$QUOTES_FILE"
-  
-  # Add some sample quotes
-  cat > "$QUOTES_FILE" << EOF
-$(date +%Y-%m-%d)|"The best way to predict the future is to invent it." - Alan Kay
-$(date +%Y-%m-%d)|"The only way to learn a new programming language is by writing programs in it." - Dennis Ritchie
-$(date +%Y-%m-%d)|"First, solve the problem. Then, write the code." - John Johnson
-$(date +%Y-%m-%d)|"Any fool can write code that a computer can understand. Good programmers write code that humans can understand." - Martin Fowler
-$(date +%Y-%m-%d)|"Programming isn't about what you know; it's about what you can figure out." - Chris Pine
-EOF
-  echo "Added sample quotes."
-else
-  echo "Quotes file already exists: $QUOTES_FILE"
-fi
 
 # Create default settings.conf if it doesn't exist
 SETTINGS_FILE="$JOURNAL_DIR/config/settings.conf"
@@ -55,10 +37,6 @@ if [[ ! -f "$SETTINGS_FILE" ]]; then
 # Journal Settings
 AUTO_JOURNAL_ENABLED=true       # Enable/disable auto-journaling after IDE closes
 JOURNAL_FILE_FORMAT="%Y-%m.md"  # Date format for journal files
-
-# Quote Settings
-QUOTES_ENABLED=true             # Enable/disable quotes system
-QUOTE_FREQUENCY=4               # Hours between quote notifications
 
 # Appearance
 PROMPT_SYMBOL="📝"              # Symbol to use in journal prompts
@@ -88,7 +66,6 @@ fi
 SCRIPT_FILES=(
   "journal_main.sh"
   "journal_utils.sh"
-  "quote_manager.sh"
   "journal_security.sh"
   "journal_git.sh"
 )
@@ -122,8 +99,29 @@ function journash() {
 
 # IDE wrapper function for auto-journaling
 function code_journal() {
-  /usr/bin/code "\$@"
-  journash --post-ide
+  # Run the IDE opening and journal process in the background
+  (
+    # Open Cursor with the --wait flag to block until it closes
+    cursor --wait "$@"
+    
+    # After Cursor closes, open a new iTerm window with colors
+    osascript -e '
+      tell application "iTerm"
+        create window with default profile
+        tell current window
+          tell current session
+            # Use proper escaping for both AppleScript and shell
+            write text "clear && echo \"\\033[1;36m=============================\\033[0m\" && echo \"\\033[1;32m ✨ Coding session completed\\033[0m\" && echo \"\\033[1;36m=============================\\033[0m\" && echo \"\" && journash --post-ide"
+          end tell
+        end tell
+      end tell
+    '
+  ) &
+  
+  # Disown the process so it continues running even if terminal is closed
+  disown
+  
+  echo "IDE launched in background. Journal entry will be prompted when IDE closes."
 }
 # End Journash Integration
 EOF
@@ -190,16 +188,8 @@ fi
 echo ""
 echo "Would you like to set up the following features?"
 
-# Quote notifications
-echo "1. Quote notifications: Periodic inspirational quotes (y/n)"
-read setup_notifications
-
-if [[ "$setup_notifications" == "y" || "$setup_notifications" == "Y" ]]; then
-  "$JOURNAL_DIR/bin/quote_manager.sh" schedule
-fi
-
 # Entry encryption
-echo "2. Entry encryption: Password protection for private entries (y/n)"
+echo "1. Entry encryption: Password protection for private entries (y/n)"
 read setup_encryption
 
 if [[ "$setup_encryption" == "y" || "$setup_encryption" == "Y" ]]; then
@@ -213,7 +203,7 @@ if [[ "$setup_encryption" == "y" || "$setup_encryption" == "Y" ]]; then
 fi
 
 # Git repository
-echo "3. Git repository: Version control and backups (y/n)"
+echo "2. Git repository: Version control and backups (y/n)"
 read setup_git
 
 if [[ "$setup_git" == "y" || "$setup_git" == "Y" ]]; then
@@ -245,7 +235,6 @@ echo ""
 echo "Quick start:"
 echo "  journash code            - Create a coding journal entry"
 echo "  journash view            - View your journal entries"
-echo "  journash quote           - Manage inspirational quotes"
 echo "  journash security        - Manage encryption for private entries"
 echo "  journash git             - Manage git repository for backups"
 echo ""
