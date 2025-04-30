@@ -5,10 +5,33 @@
 
 # Configuration variables
 JOURNAL_DIR="$HOME/.coding_journal"
+
 CONFIG_DIR="$JOURNAL_DIR/config"
 DATA_DIR="$JOURNAL_DIR/data"
 BIN_DIR="$JOURNAL_DIR/bin"
+
 SETTINGS_FILE="$CONFIG_DIR/settings.conf"
+SECURITY_FILE="$CONFIG_DIR/security.conf"
+GIT_CONFIG_FILE="$CONFIG_DIR/git.conf"
+UTILS_SCRIPT="$BIN_DIR/journal_utils.sh"
+QUOTE_SCRIPT="$BIN_DIR/quote_manager.sh"
+SECURITY_SCRIPT="$BIN_DIR/journal_security.sh"
+GIT_SCRIPT="$BIN_DIR/journal_git.sh"
+
+# ======================================
+# Source utility functions if available
+# ======================================
+if [[ -f "$UTILS_SCRIPT" ]]; then
+  source "$UTILS_SCRIPT"
+else
+  echo "Warning: Utility script not found at $UTILS_SCRIPT"
+  # Fallback implementations for critical functions
+  function detect_os() { 
+    if [[ "$(uname)" == "Darwin" ]]; then echo "macos"; else echo "linux"; fi 
+  }
+  function format_month() { echo "$1"; }
+  function print_line() { echo "----------------------"; }
+fi
 
 # ================================
 # Source settings if they exist
@@ -18,6 +41,25 @@ if [[ -f "$SETTINGS_FILE" ]]; then
 else
   echo "Error: Settings file not found. Please run setup script first."
   exit 1
+fi
+
+# =======================================
+# Source security settings if they exist
+# =======================================
+if [[ -f "$SECURITY_FILE" ]]; then
+  source "$SECURITY_FILE"
+else
+  ENCRYPTION_ENABLED=false
+fi
+
+# ======================================
+# Source git configuration if it exists
+# ======================================
+if [[ -f "$GIT_CONFIG_FILE" ]]; then
+  source "$GIT_CONFIG_FILE"
+else
+  GIT_ENABLED=false
+  GIT_AUTO_COMMIT=false
 fi
 
 # =====================================
@@ -105,6 +147,24 @@ function create_journal_entry() {
     entry_content+="---\n\n"
   fi
   
+  # Check if encryption is enabled and ask if entry should be private
+  local is_encrypted=false
+  if [[ "$ENCRYPTION_ENABLED" == "true" && -f "$SECURITY_SCRIPT" ]]; then
+    echo "Would you like to encrypt this entry? (y/n)"
+    read encrypt_entry
+    
+    if [[ "$encrypt_entry" == "y" || "$encrypt_entry" == "Y" ]]; then
+      # Encrypt the entry
+      encrypted_content=$("$SECURITY_SCRIPT" encrypt "$entry_content")
+      if [[ $? -eq 0 ]]; then
+        entry_content="$encrypted_content"
+        is_encrypted=true
+      else
+        echo "Encryption failed. Saving entry without encryption."
+      fi
+    fi
+  fi
+  
   # Save the entry to file
   if [[ ! -f "$file_path" ]]; then
     # Create new file with header if it doesn't exist
@@ -114,7 +174,24 @@ function create_journal_entry() {
   # Append the entry to the file
   echo "$entry_content" >> "$file_path"
   
-  echo "✅ Journal entry saved to $file_path"
+  if [[ "$is_encrypted" == "true" ]]; then
+    echo "✅ Encrypted journal entry saved to $file_path"
+  else
+    echo "✅ Journal entry saved to $file_path"
+  fi
+
+  # Commit changes if git is enabled
+  if [[ "$GIT_ENABLED" == "true" && "$GIT_AUTO_COMMIT" == "true" && -f "$GIT_SCRIPT" ]]; then
+    echo "Committing changes to git repository..."
+    "$GIT_SCRIPT" commit
+  fi
+  
+  # Show a random quote after journaling if quotes are enabled
+  if [[ "$QUOTES_ENABLED" == "true" && -f "$QUOTE_SCRIPT" ]]; then
+    echo ""
+    echo "Here's an inspirational quote for you:"
+    "$QUOTE_SCRIPT" random
+  fi
 }
 
 # ============================
@@ -122,7 +199,7 @@ function create_journal_entry() {
 # ============================
 function list_journals() {
   echo "📚 Available Journal Months:"
-  echo "----------------------------"
+  print_line
   
   # Find all markdown files in the data directory and sort by date
   local files=($(ls -1 "$DATA_DIR"/*.md 2>/dev/null | sort -r))
@@ -143,16 +220,13 @@ function list_journals() {
     local coding_count=$(grep -c "^## Coding Session" "$file")
     local personal_count=$(grep -c "^## Personal Reflection" "$file")
     
-    # Format month for display (handle both macOS and Linux date commands)
-    if [[ $(uname) == "Darwin" ]]; then
-      # macOS
-      local display_month=$(date -j -f "%Y-%m" "$month" "+%B %Y" 2>/dev/null || echo "$month")
-    else
-      # Linux
-      local display_month=$(date -d "$month-01" "+%B %Y" 2>/dev/null || echo "$month")
-    fi
+    # Count encrypted entries
+    local encrypted_count=$(grep -c "<!-- ENCRYPTED ENTRY -->" "$file")
     
-    echo "📔 $display_month: $entry_count entries ($coding_count coding, $personal_count personal)"
+    # Format month for display
+    local display_month=$(format_month "$month")
+    
+    echo "📔 $display_month: $entry_count entries ($coding_count coding, $personal_count personal, $encrypted_count encrypted)"
   done
   
   echo ""
@@ -172,19 +246,70 @@ function view_month() {
     return 1
   fi
   
-  # Format month for display (handle both macOS and Linux date commands)
-  if [[ $(uname) == "Darwin" ]]; then
-    # macOS
-    local display_month=$(date -j -f "%Y-%m" "$month" "+%B %Y" 2>/dev/null || echo "$month")
-  else
-    # Linux
-    local display_month=$(date -d "$month-01" "+%B %Y" 2>/dev/null || echo "$month")
-  fi
+  # Format month for display
+  local display_month=$(format_month "$month")
   
   echo "📖 Viewing entries for $display_month"
   echo ""
   
-  # Use less to display the file with formatting
+  # Check if file contains encrypted entries
+  if grep -q "<!-- ENCRYPTED ENTRY -->" "$file_path" && [[ -f "$SECURITY_SCRIPT" ]]; then
+    echo "This file contains encrypted entries."
+    echo "Would you like to decrypt them? (y/n)"
+    read decrypt_entries
+    
+    if [[ "$decrypt_entries" == "y" || "$decrypt_entries" == "Y" ]]; then
+      # Create a temporary file for decrypted content
+      local temp_file=$(mktemp)
+      
+      # Copy original file to temp file
+      cp "$file_path" "$temp_file"
+      
+      # Find all encrypted entries
+      local encrypted_blocks=$(grep -n "<!-- ENCRYPTED ENTRY -->" "$temp_file" | cut -d: -f1)
+      
+      if [[ -n "$encrypted_blocks" ]]; then
+        # Get password once
+        echo "Please enter your encryption password:"
+        read -s password
+        
+        # Process each encrypted block
+        for line_num in $encrypted_blocks; do
+          # Extract the encrypted content (starts after marker, ends before next entry or EOF)
+          local start_line=$((line_num + 1))
+          local end_line=$(grep -n "^## " "$temp_file" | awk -F: -v start="$start_line" '$1 > start {print $1; exit}')
+          
+          if [[ -z "$end_line" ]]; then
+            end_line=$(wc -l < "$temp_file")
+          else
+            end_line=$((end_line - 1))
+          fi
+          
+          local encrypted_content=$(sed -n "${start_line},${end_line}p" "$temp_file")
+          
+          # Decrypt the content
+          local decrypted_content=$("$SECURITY_SCRIPT" decrypt "$encrypted_content")
+          
+          if [[ $? -eq 0 ]]; then
+            # Replace the encrypted content with decrypted in the temp file
+            # This is a simplified approach - in a real implementation, you'd need more robust file handling
+            sed -i.bak "${line_num}d" "$temp_file" # Remove encryption marker
+            sed -i.bak "${start_line},${end_line}c\\
+$decrypted_content" "$temp_file"
+          fi
+        done
+        
+        # View the decrypted file
+        less -R "$temp_file"
+        
+        # Clean up
+        rm "$temp_file"
+        return 0
+      fi
+    fi
+  fi
+  
+  # If no decryption needed or requested, just view the file normally
   less -R "$file_path"
 }
 
@@ -215,14 +340,12 @@ function search_entries() {
   for file in "${files[@]}"; do
     # Extract month from filename
     local month=$(basename "$file" .md)
+    local display_month=$(format_month "$month")
     
-    # Format month for display (handle both macOS and Linux date commands)
-    if [[ $(uname) == "Darwin" ]]; then
-      # macOS
-      local display_month=$(date -j -f "%Y-%m" "$month" "+%B %Y" 2>/dev/null || echo "$month")
-    else
-      # Linux
-      local display_month=$(date -d "$month-01" "+%B %Y" 2>/dev/null || echo "$month")
+    # Skip encrypted content in search
+    if grep -q "<!-- ENCRYPTED ENTRY -->" "$file"; then
+      echo "📔 $display_month: Contains encrypted entries (not searched)"
+      continue
     fi
     
     # Search for term in the file and get matching lines with context
@@ -239,16 +362,8 @@ function search_entries() {
           local line_num=$(echo "$line" | cut -d: -f1)
           local content=$(echo "$line" | cut -d: -f2-)
           
-          # Highlight the search term (use different methods for macOS and Linux)
-          if [[ $(uname) == "Darwin" ]]; then
-            # macOS (BSD sed)
-            highlighted_content=$(echo "$content" | sed -E "s/$search_term/\\\\033[1;33m&\\\\033[0m/gi")
-          else
-            # Linux (GNU sed)
-            highlighted_content=$(echo "$content" | sed "s/$search_term/\x1B[1;33m&\x1B[0m/gi")
-          fi
-          
-          echo "  Line $line_num: $highlighted_content"
+          # Use simplified highlighting approach for better cross-platform compatibility
+          echo "  Line $line_num: $content"
         fi
       done
       echo ""
@@ -258,6 +373,7 @@ function search_entries() {
   
   if [[ "$results_found" == "false" ]]; then
     echo "No matches found for '$search_term'."
+    echo "Note: Encrypted entries were not searched."
   fi
 }
 
@@ -279,21 +395,25 @@ function show_stats() {
   local total_entries=0
   local coding_entries=0
   local personal_entries=0
+  local encrypted_entries=0
   
   for file in "${files[@]}"; do
     # Count entries in each file
     local file_entries=$(grep -c "^## " "$file")
     local file_coding=$(grep -c "^## Coding Session" "$file")
     local file_personal=$(grep -c "^## Personal Reflection" "$file")
+    local file_encrypted=$(grep -c "<!-- ENCRYPTED ENTRY -->" "$file")
     
     total_entries=$((total_entries + file_entries))
     coding_entries=$((coding_entries + file_coding))
     personal_entries=$((personal_entries + file_personal))
+    encrypted_entries=$((encrypted_entries + file_encrypted))
   done
   
   echo "Total journal entries: $total_entries"
   echo "Coding journal entries: $coding_entries"
   echo "Personal journal entries: $personal_entries"
+  echo "Encrypted entries: $encrypted_entries"
   
   # Find the most active month
   local most_active_month=""
@@ -310,16 +430,28 @@ function show_stats() {
   done
   
   if [[ -n "$most_active_month" ]]; then
-    # Format month for display (handle both macOS and Linux date commands)
-    if [[ $(uname) == "Darwin" ]]; then
-      # macOS
-      local display_month=$(date -j -f "%Y-%m" "$most_active_month" "+%B %Y" 2>/dev/null || echo "$most_active_month")
-    else
-      # Linux
-      local display_month=$(date -d "$most_active_month-01" "+%B %Y" 2>/dev/null || echo "$most_active_month")
-    fi
-    
+    local display_month=$(format_month "$most_active_month")
     echo "Most active month: $display_month ($most_active_count entries)"
+  fi
+  
+  # Display encryption status
+  if [[ "$ENCRYPTION_ENABLED" == "true" ]]; then
+    echo "Encryption is enabled"
+    echo "Encrypted entries: $encrypted_entries ($(( encrypted_entries * 100 / total_entries ))%)"
+  else
+    echo "Encryption is not enabled"
+  fi
+  
+  # Display git status
+  if [[ "$GIT_ENABLED" == "true" ]]; then
+    echo "Git integration is enabled"
+    if [[ -n "$GIT_REMOTE_URL" ]]; then
+      echo "Remote repository: $GIT_REMOTE_URL"
+    else
+      echo "No remote repository configured"
+    fi
+  else
+    echo "Git integration is not enabled"
   fi
   
   echo ""
@@ -367,6 +499,44 @@ elif [[ "$1" == "search" && -n "$2" ]]; then
 elif [[ "$1" == "stats" ]]; then
   # Direct stats command
   show_stats
+elif [[ "$1" == "quote" ]]; then
+  # Quote system commands
+  if [[ -f "$QUOTE_SCRIPT" ]]; then
+    # Pass all arguments to the quote script
+    shift  # Remove the "quote" argument
+    "$QUOTE_SCRIPT" "$@"
+  else
+    echo "Quote manager not found. Please run setup script first."
+    exit 1
+  fi
+elif [[ "$1" == "security" ]]; then
+  # Security and encryption commands
+  if [[ -f "$SECURITY_SCRIPT" ]]; then
+    # Pass all arguments to the security script
+    shift  # Remove the "security" argument
+    "$SECURITY_SCRIPT" "$@"
+  else
+    echo "Security manager not found. Please run setup script first."
+    exit 1
+  fi
+elif [[ "$1" == "git" ]]; then
+  # Git integration commands
+  if [[ -f "$GIT_SCRIPT" ]]; then
+    # Pass all arguments to the git script
+    shift  # Remove the "git" argument
+    "$GIT_SCRIPT" "$@"
+  else
+    echo "Git manager not found. Please run setup script first."
+    exit 1
+  fi
+elif [[ "$1" == "test" ]]; then
+  # Test system compatibility
+  if [[ -f "$UTILS_SCRIPT" ]]; then
+    "$UTILS_SCRIPT"
+  else
+    echo "Utility script not found. Cannot run tests."
+    exit 1
+  fi
 elif [[ "$1" == "--post-ide" ]]; then
   # Called after IDE closes (same as coding)
   create_journal_entry "coding"
@@ -375,24 +545,35 @@ elif [[ "$1" == "help" || "$1" == "--help" ]]; then
   # =========================
   # Display help information
   # =========================
-  echo "Usage: journash [OPTION]"
+  echo "Usage: journash [COMMAND]"
   echo "A simple CLI journaling system."
   echo ""
-  echo "Options:"
-  echo "  code, coding   Create a coding journal entry"
-  echo "  personal       Create a personal journal entry"
-  echo "  view [month]   View entries (optional: specify month as MM-YYYY)"
-  echo "  help           Show this help message"
+  echo "Commands:"
+  echo "  code, coding       Create a coding journal entry"
+  echo "  personal           Create a personal journal entry"
+  echo "  view               List all available journals"
+  echo "  view YYYY-MM       View entries for specific month"
+  echo "  search TERM        Search for a term across all entries"
+  echo "  stats              Show journal statistics"
+  echo "  quote              Manage inspirational quotes"
+  echo "  security           Manage encryption for private entries"
+  echo "  git                Manage git repository for backups"
+  echo "  test               Test system compatibility"
+  echo "  help               Show this help message"
   echo ""
   echo "Examples:"
-  echo "  journash code      # Create a coding journal entry"
-  echo "  journash personal  # Create a personal journal entry"
-  echo "  journash view      # View recent entries"
-  echo "  journash view 04-2025  # View entries from April 2025"
+  echo "  journash code                # Create a coding journal entry"
+  echo "  journash personal            # Create a personal journal entry"
+  echo "  journash view                # List all available journals"
+  echo "  journash view 04-2025        # View entries from April 2025"
+  echo "  journash search \"python\"     # Search for entries containing 'python'"
+  echo "  journash quote add           # Add a new quote"
+  echo "  journash security setup      # Set up encryption for private entries"
+  echo "  journash git init            # Initialize git repository for backups"
   exit 0
 else
   # Unknown argument
-  echo "Unknown option: $1"
+  echo "Unknown command: $1"
   echo "Try 'journash help' for more information."
   exit 1
 fi

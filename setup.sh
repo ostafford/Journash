@@ -31,8 +31,16 @@ QUOTES_FILE="$JOURNAL_DIR/data/quotes.txt"
 if [[ ! -f "$QUOTES_FILE" ]]; then
   echo "Creating empty quotes file: $QUOTES_FILE"
   touch "$QUOTES_FILE"
-  # Add a sample quote
-  echo "$(date +%Y-%m-%d)|\"The best way to predict the future is to invent it.\" - Alan Kay" > "$QUOTES_FILE"
+  
+  # Add some sample quotes
+  cat > "$QUOTES_FILE" << EOF
+$(date +%Y-%m-%d)|"The best way to predict the future is to invent it." - Alan Kay
+$(date +%Y-%m-%d)|"The only way to learn a new programming language is by writing programs in it." - Dennis Ritchie
+$(date +%Y-%m-%d)|"First, solve the problem. Then, write the code." - John Johnson
+$(date +%Y-%m-%d)|"Any fool can write code that a computer can understand. Good programmers write code that humans can understand." - Martin Fowler
+$(date +%Y-%m-%d)|"Programming isn't about what you know; it's about what you can figure out." - Chris Pine
+EOF
+  echo "Added sample quotes."
 else
   echo "Quotes file already exists: $QUOTES_FILE"
 fi
@@ -76,18 +84,28 @@ else
   echo "Security file already exists: $SECURITY_FILE"
 fi
 
-# Copy journal_main.sh to bin directory if it exists
-MAIN_SCRIPT="./src/bin/journal_main.sh"
-DEST_SCRIPT="$JOURNAL_DIR/bin/journal_main.sh"
+# Copy main script files to bin directory
+SCRIPT_FILES=(
+  "journal_main.sh"
+  "journal_utils.sh"
+  "quote_manager.sh"
+  "journal_security.sh"
+  "journal_git.sh"
+)
 
-if [[ -f "$MAIN_SCRIPT" ]]; then
-  echo "Copying main script to: $DEST_SCRIPT"
-  cp "$MAIN_SCRIPT" "$DEST_SCRIPT"
-  chmod +x "$DEST_SCRIPT"
-else
-  echo "Warning: Main script not found at $MAIN_SCRIPT"
-  echo "Please create the script file first."
-fi
+for script in "${SCRIPT_FILES[@]}"; do
+  SRC_SCRIPT="./src/bin/$script"
+  DEST_SCRIPT="$JOURNAL_DIR/bin/$script"
+  
+  if [[ -f "$SRC_SCRIPT" ]]; then
+    echo "Copying $script to: $DEST_SCRIPT"
+    cp "$SRC_SCRIPT" "$DEST_SCRIPT"
+    chmod +x "$DEST_SCRIPT"
+  else
+    echo "Warning: Script not found at $SRC_SCRIPT"
+    echo "Please create the script file first."
+  fi
+done
 
 # Check if Zsh integration already exists
 if ! grep -q "# Journash Integration" "$HOME/.zshrc"; then
@@ -145,6 +163,91 @@ EOF
   echo "Sample entry created."
 fi
 
+# Test system compatibility
+echo "Testing system compatibility..."
+"$JOURNAL_DIR/bin/journal_utils.sh"
+
+# Check for required utilities
+echo "Checking for required utilities..."
+
+# Check for OpenSSL (required for encryption)
+if ! command -v openssl &> /dev/null; then
+  echo "⚠️ Warning: OpenSSL is not installed. Encryption features will not be available."
+  echo "Please install OpenSSL to use encryption for private entries."
+else
+  echo "✅ OpenSSL is available. Encryption features can be used."
+fi
+
+# Check for Git (required for version control)
+if ! command -v git &> /dev/null; then
+  echo "⚠️ Warning: Git is not installed. Version control features will not be available."
+  echo "Please install Git to use backup and versioning features."
+else
+  echo "✅ Git is available. Version control features can be used."
+fi
+
+# Feature setup questions
+echo ""
+echo "Would you like to set up the following features?"
+
+# Quote notifications
+echo "1. Quote notifications: Periodic inspirational quotes (y/n)"
+read setup_notifications
+
+if [[ "$setup_notifications" == "y" || "$setup_notifications" == "Y" ]]; then
+  "$JOURNAL_DIR/bin/quote_manager.sh" schedule
+fi
+
+# Entry encryption
+echo "2. Entry encryption: Password protection for private entries (y/n)"
+read setup_encryption
+
+if [[ "$setup_encryption" == "y" || "$setup_encryption" == "Y" ]]; then
+  # Check if OpenSSL is available
+  if command -v openssl &> /dev/null; then
+    "$JOURNAL_DIR/bin/journal_security.sh" setup
+  else
+    echo "❌ Cannot set up encryption: OpenSSL is not installed."
+    echo "Please install OpenSSL and run 'journash security setup' later."
+  fi
+fi
+
+# Git repository
+echo "3. Git repository: Version control and backups (y/n)"
+read setup_git
+
+if [[ "$setup_git" == "y" || "$setup_git" == "Y" ]]; then
+  # Check if Git is available
+  if command -v git &> /dev/null; then
+    "$JOURNAL_DIR/bin/journal_git.sh" init
+    
+    echo "Would you like to set up a remote repository for cloud backup? (y/n)"
+    read setup_remote
+    
+    if [[ "$setup_remote" == "y" || "$setup_remote" == "Y" ]]; then
+      echo "Please enter the URL of your remote repository:"
+      read remote_url
+      
+      if [[ -n "$remote_url" ]]; then
+        "$JOURNAL_DIR/bin/journal_git.sh" remote "$remote_url"
+      fi
+    fi
+  else
+    echo "❌ Cannot set up Git repository: Git is not installed."
+    echo "Please install Git and run 'journash git init' later."
+  fi
+fi
+
 echo "✅ Journash setup complete!"
 echo "You can now use 'journash' to create journal entries."
 echo "Try 'journash help' to see all available commands."
+echo ""
+echo "Quick start:"
+echo "  journash code            - Create a coding journal entry"
+echo "  journash view            - View your journal entries"
+echo "  journash quote           - Manage inspirational quotes"
+echo "  journash security        - Manage encryption for private entries"
+echo "  journash git             - Manage git repository for backups"
+echo ""
+echo "For automatic journaling when closing VS Code:"
+echo "  Use 'code_journal' instead of 'code' to launch VS Code"
