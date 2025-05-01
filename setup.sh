@@ -112,14 +112,23 @@ function code_journal() {
   function post_ide_journal() {
     clear
     echo -e "\033[1;36m=============================\033[0m"
-    echo -e "\033[1;32m ✨ Coding session completed\033[0m"
+    echo -e "\033[1;32m ✨ Coding session completed \033[0m"
     echo -e "\033[1;36m=============================\033[0m"
     echo ""
     journash --post-ide
   }
-  
+
   # Run the IDE opening and journal process in the background
   (
+    # Create a trap to ensure temporary files are cleaned up
+    function cleanup_temp_files() {
+      if [[ -n "$tmp_script" && -f "$tmp_script" ]]; then
+        rm -f "$tmp_script"
+      fi
+    }
+    # Set trap to call cleanup function on exit, interrupt, or termination
+    trap cleanup_temp_files EXIT INT TERM
+    
     # Open the IDE with the configured command
     $IDE_COMMAND $IDE_ARGS "$@"
     
@@ -129,31 +138,37 @@ function code_journal() {
     if [[ "$os" == "macos" ]]; then
       # macOS using AppleScript
       if [[ "$TERMINAL_EMULATOR" == "iterm" ]]; then
-        # Create a temporary script file to avoid quote issues
-        local tmp_script="/tmp/journash_post_ide_$$.sh"
-        echo '#!/bin/zsh
+        # Create a temporary script file securely
+        tmp_script=$(mktemp "${TMPDIR:-/tmp}/journash_post_ide_XXXXXX.sh")
+        
+        # Make it executable
+        chmod 700 "$tmp_script"
+        
+        # Add content to the script
+        cat > "$tmp_script" << 'EOFSCRIPT'
+cat > "$tmp_script" << 'EOFSCRIPT'
+#!/bin/zsh
 clear
 echo -e "\033[1;36m=============================\033[0m"
-echo -e "\033[1;32m ✨ Coding session completed\033[0m"
+echo -e "\033[1;32m ✨ Coding session completed \033[0m"
 echo -e "\033[1;36m=============================\033[0m"
 echo ""
-journash --post-ide
-' > "$tmp_script"
-        chmod +x "$tmp_script"
+EOFSCRIPT
         
         # Launch iTerm with the script
         osascript -e "tell application \"iTerm\"
           create window with default profile
           tell current window
             tell current session
-              write text \"$tmp_script\"
+              write text \"$tmp_script\; journash --post-ide\"
             end tell
           end tell
         end tell"
         
-        # Clean up
-        sleep 3
-        rm "$tmp_script"
+        # Small delay to ensure the script has been loaded
+        sleep 1
+        
+        # Cleanup is handled by the trap, we don't need to manually remove it here
       elif [[ "$TERMINAL_EMULATOR" == "terminal" ]]; then
         # Alternative for Terminal.app
         osascript -e "tell application \"Terminal\" to do script \"journash --post-ide\""
@@ -182,6 +197,7 @@ journash --post-ide
   echo "IDE launched in background. Journal entry will be prompted when IDE closes."
 }
 # End Journash Integration
+
 EOF
 
   echo "✅ Zsh integration complete!"
