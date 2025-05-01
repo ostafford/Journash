@@ -54,27 +54,10 @@ else
   echo "Settings file already exists: $SETTINGS_FILE"
 fi
 
-# Create empty security.conf file for future use
-SECURITY_FILE="$JOURNAL_DIR/config/security.conf"
-if [[ ! -f "$SECURITY_FILE" ]]; then
-  echo "Creating security configuration file: $SECURITY_FILE"
-  cat > "$SECURITY_FILE" << EOF
-# Journash Security Configuration
-
-# Encryption Settings
-ENCRYPTION_ENABLED=false        # Enable/disable encryption for private entries
-# PASSWORD_HASH=                # Will be set when password is created
-EOF
-  echo "Security configuration initialized."
-else
-  echo "Security file already exists: $SECURITY_FILE"
-fi
-
 # Copy main script files to bin directory
 SCRIPT_FILES=(
   "journal_main.sh"
   "journal_utils.sh"
-  "journal_security.sh"
   "journal_git.sh"
 )
 
@@ -243,13 +226,6 @@ echo "Testing system compatibility..."
 # Check for required utilities
 echo "Checking for required utilities..."
 
-# Check for OpenSSL (required for encryption)
-if ! command -v openssl &> /dev/null; then
-  echo "⚠️ Warning: OpenSSL is not installed. Encryption features will not be available."
-  echo "Please install OpenSSL to use encryption for private entries."
-else
-  echo "✅ OpenSSL is available. Encryption features can be used."
-fi
 
 # Check for Git (required for version control)
 if ! command -v git &> /dev/null; then
@@ -262,20 +238,6 @@ fi
 # Feature setup questions
 echo ""
 echo "Would you like to set up the following features?"
-
-# Entry encryption
-echo "1. Entry encryption: Password protection for private entries (y/n)"
-read setup_encryption
-
-if [[ "$setup_encryption" == "y" || "$setup_encryption" == "Y" ]]; then
-  # Check if OpenSSL is available
-  if command -v openssl &> /dev/null; then
-    "$JOURNAL_DIR/bin/journal_security.sh" setup
-  else
-    echo "❌ Cannot set up encryption: OpenSSL is not installed."
-    echo "Please install OpenSSL and run 'journash security setup' later."
-  fi
-fi
 
 # Git repository
 echo "2. Git repository: Version control and backups (y/n)"
@@ -310,7 +272,6 @@ echo ""
 echo "Quick start:"
 echo "  journash code            - Create a coding journal entry"
 echo "  journash view            - View your journal entries"
-echo "  journash security        - Manage encryption for private entries"
 echo "  journash git             - Manage git repository for backups"
 echo ""
 echo "For automatic journaling when closing your IDE:"

@@ -11,10 +11,8 @@ DATA_DIR="$JOURNAL_DIR/data"
 BIN_DIR="$JOURNAL_DIR/bin"
 
 SETTINGS_FILE="$CONFIG_DIR/settings.conf"
-SECURITY_FILE="$CONFIG_DIR/security.conf"
 GIT_CONFIG_FILE="$CONFIG_DIR/git.conf"
 UTILS_SCRIPT="$BIN_DIR/journal_utils.sh"
-SECURITY_SCRIPT="$BIN_DIR/journal_security.sh"
 GIT_SCRIPT="$BIN_DIR/journal_git.sh"
 
 # ======================================
@@ -42,14 +40,6 @@ else
   exit 1
 fi
 
-# =======================================
-# Source security settings if they exist
-# =======================================
-if [[ -f "$SECURITY_FILE" ]]; then
-  source "$SECURITY_FILE"
-else
-  ENCRYPTION_ENABLED=false
-fi
 
 # ======================================
 # Source git configuration if it exists
@@ -146,24 +136,6 @@ function create_journal_entry() {
     entry_content+="---\n\n"
   fi
   
-  # Check if encryption is enabled and ask if entry should be private
-  local is_encrypted=false
-  if [[ "$ENCRYPTION_ENABLED" == "true" && -f "$SECURITY_SCRIPT" ]]; then
-    echo "Would you like to encrypt this entry? (y/n)"
-    read encrypt_entry
-    
-    if [[ "$encrypt_entry" == "y" || "$encrypt_entry" == "Y" ]]; then
-      # Encrypt the entry
-      encrypted_content=$("$SECURITY_SCRIPT" encrypt "$entry_content")
-      if [[ $? -eq 0 ]]; then
-        entry_content="$encrypted_content"
-        is_encrypted=true
-      else
-        echo "Encryption failed. Saving entry without encryption."
-      fi
-    fi
-  fi
-  
   # Save the entry to file
   if [[ ! -f "$file_path" ]]; then
     # Create new file with header if it doesn't exist
@@ -172,12 +144,7 @@ function create_journal_entry() {
   
   # Append the entry to the file
   echo "$entry_content" >> "$file_path"
-  
-  if [[ "$is_encrypted" == "true" ]]; then
-    echo "✅ Encrypted journal entry saved to $file_path"
-  else
-    echo "✅ Journal entry saved to $file_path"
-  fi
+  echo "✅ Journal entry saved to $file_path"
 
   # Commit changes if git is enabled
   if [[ "$GIT_ENABLED" == "true" && "$GIT_AUTO_COMMIT" == "true" && -f "$GIT_SCRIPT" ]]; then
@@ -212,17 +179,13 @@ function list_journals() {
     local coding_count=$(grep -c "^## Coding Session" "$file")
     local personal_count=$(grep -c "^## Personal Reflection" "$file")
     
-    # Count encrypted entries
-    local encrypted_count=$(grep -c "<!-- ENCRYPTED ENTRY -->" "$file")
-    
     # Format month for display
     local display_month=$(format_month "$month")
-    
-    echo "📔 $display_month: $entry_count entries ($coding_count coding, $personal_count personal, $encrypted_count encrypted)"
+    echo "📔 $display_month: $entry_count entries ($coding_count coding, $personal_count personal)"
   done
   
   echo ""
-  echo "Use 'journash view YYYY-MM' to view a specific month."
+  echo "Use 'journash view YYYY-MM' to view a specific entry."
 }
 
 # ==============================================
@@ -244,96 +207,9 @@ function view_month() {
   echo "📖 Viewing entries for $display_month"
   echo ""
   
-  # Check if file contains encrypted entries
-  if grep -q "<!-- ENCRYPTED ENTRY -->" "$file_path" && [[ -f "$SECURITY_SCRIPT" ]]; then
-    echo "This file contains encrypted entries."
-    echo "Would you like to decrypt them? (y/n)"
-    read decrypt_entries
-    
-    if [[ "$decrypt_entries" == "y" || "$decrypt_entries" == "Y" ]]; then
-      # Create a temporary file for decrypted content
-      local temp_file=$(mktemp)
-      
-      # Copy original file to temp file
-      cp "$file_path" "$temp_file"
-      
-      # Get password once
-      echo "Please enter your encryption password:"
-      read -s password
-      
-      # Find all encrypted entries - use a more reliable approach
-      grep -n "<!-- ENCRYPTED ENTRY -->" "$temp_file" | while IFS=: read -r line_num marker; do
-        # Calculate start and end lines more carefully
-        local start_line=$((line_num + 1))
-        
-        # Find the next entry marker or end of file
-        local next_marker=$(tail -n +$((start_line)) "$temp_file" | grep -n "^## \|<!-- ENCRYPTED ENTRY -->" | head -1)
-        
-        if [[ -n "$next_marker" ]]; then
-          # Extract line number of the next marker relative to start_line
-          local relative_lines=$(echo "$next_marker" | cut -d: -f1)
-          local end_line=$((start_line + relative_lines - 1))
-        else
-          # If no next marker, go to end of file
-          end_line=$(wc -l < "$temp_file")
-        fi
-        
-        # Extract the encrypted content
-        local encrypted_content=$(sed -n "${start_line},${end_line}p" "$temp_file")
-        
-        # Trim any leading/trailing whitespace
-        encrypted_content=$(echo "$encrypted_content" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
-        
-        if [[ -n "$encrypted_content" ]]; then
-          # Attempt to decrypt the content
-          local decrypted_content=$("$SECURITY_SCRIPT" decrypt "$encrypted_content" 2>/dev/null)
-          local decrypt_status=$?
-          
-          if [[ $decrypt_status -eq 0 && -n "$decrypted_content" ]]; then
-            # Success - replace content in the temp file
-            # First, remove encryption marker
-            sed -i.bak "${line_num}d" "$temp_file"
-            
-            # Now replace encrypted content with decrypted
-            # Using a temporary replacement file to avoid sed issues with newlines
-            local replace_file=$(mktemp)
-            echo "$decrypted_content" > "$replace_file"
-            
-            # Adjust line numbers after deletion of marker
-            start_line=$((start_line - 1))
-            end_line=$((end_line - 1))
-            
-            # Delete encrypted content lines
-            sed -i.bak "${start_line},${end_line}d" "$temp_file"
-            
-            # Insert decrypted content
-            sed -i.bak "${start_line}r $replace_file" "$temp_file"
-            
-            # Clean up
-            rm "$replace_file"
-          else
-            # Decryption failed - replace with a message
-            sed -i.bak "${line_num}c\\
-<!-- ENCRYPTED ENTRY (Decryption failed) -->" "$temp_file"
-            sed -i.bak "${start_line},${end_line}c\\
-*This entry could not be decrypted. The password may be incorrect.*" "$temp_file"
-          fi
-        fi
-      done
-      
-      # View the modified file
-      less -R "$temp_file"
-      
-      # Clean up
-      rm "$temp_file" "$temp_file.bak" 2>/dev/null
-      return 0
-    fi
-  fi
-  
-  # If no decryption needed or requested, just view the file normally
+
   less -R "$file_path"
 }
-
 # ===========================================
 # Function to search through journal entries
 # ===========================================
@@ -362,12 +238,7 @@ function search_entries() {
     # Extract month from filename
     local month=$(basename "$file" .md)
     local display_month=$(format_month "$month")
-    
-    # Skip encrypted content in search
-    if grep -q "<!-- ENCRYPTED ENTRY -->" "$file"; then
-      echo "📔 $display_month: Contains encrypted entries (not searched)"
-      continue
-    fi
+  
     
     # Search for term in the file and get matching lines with context
     local matches=$(grep -n -A 2 -B 2 -i "$search_term" "$file")
@@ -391,11 +262,6 @@ function search_entries() {
       results_found=true
     fi
   done
-  
-  if [[ "$results_found" == "false" ]]; then
-    echo "No matches found for '$search_term'."
-    echo "Note: Encrypted entries were not searched."
-  fi
 }
 
 # =====================================
@@ -416,25 +282,21 @@ function show_stats() {
   local total_entries=0
   local coding_entries=0
   local personal_entries=0
-  local encrypted_entries=0
   
   for file in "${files[@]}"; do
     # Count entries in each file
     local file_entries=$(grep -c "^## " "$file")
     local file_coding=$(grep -c "^## Coding Session" "$file")
     local file_personal=$(grep -c "^## Personal Reflection" "$file")
-    local file_encrypted=$(grep -c "<!-- ENCRYPTED ENTRY -->" "$file")
     
     total_entries=$((total_entries + file_entries))
     coding_entries=$((coding_entries + file_coding))
     personal_entries=$((personal_entries + file_personal))
-    encrypted_entries=$((encrypted_entries + file_encrypted))
   done
   
   echo "Total journal entries: $total_entries"
   echo "Coding journal entries: $coding_entries"
   echo "Personal journal entries: $personal_entries"
-  echo "Encrypted entries: $encrypted_entries"
   
   # Find the most active month
   local most_active_month=""
@@ -453,14 +315,6 @@ function show_stats() {
   if [[ -n "$most_active_month" ]]; then
     local display_month=$(format_month "$most_active_month")
     echo "Most active month: $display_month ($most_active_count entries)"
-  fi
-  
-  # Display encryption status
-  if [[ "$ENCRYPTION_ENABLED" == "true" ]]; then
-    echo "Encryption is enabled"
-    echo "Encrypted entries: $encrypted_entries ($(( encrypted_entries * 100 / total_entries ))%)"
-  else
-    echo "Encryption is not enabled"
   fi
   
   # Display git status
@@ -520,16 +374,6 @@ elif [[ "$1" == "search" && -n "$2" ]]; then
 elif [[ "$1" == "stats" ]]; then
   # Direct stats command
   show_stats
-elif [[ "$1" == "security" ]]; then
-  # Security and encryption commands
-  if [[ -f "$SECURITY_SCRIPT" ]]; then
-    # Pass all arguments to the security script
-    shift  # Remove the "security" argument
-    "$SECURITY_SCRIPT" "$@"
-  else
-    echo "Security manager not found. Please run setup script first."
-    exit 1
-  fi
 elif [[ "$1" == "git" ]]; then
   # Git integration commands
   if [[ -f "$GIT_SCRIPT" ]]; then
@@ -566,7 +410,6 @@ elif [[ "$1" == "help" || "$1" == "--help" ]]; then
   echo "  view YYYY-MM       View entries for specific month"
   echo "  search TERM        Search for a term across all entries"
   echo "  stats              Show journal statistics"
-  echo "  security           Manage encryption for private entries"
   echo "  git                Manage git repository for backups"
   echo "  test               Test system compatibility"
   echo "  help               Show this help message"
@@ -577,7 +420,6 @@ elif [[ "$1" == "help" || "$1" == "--help" ]]; then
   echo "  journash view                # List all available journals"
   echo "  journash view 04-2025        # View entries from April 2025"
   echo "  journash search \"python\"     # Search for entries containing 'python'"
-  echo "  journash security setup      # Set up encryption for private entries"
   echo "  journash git init            # Initialize git repository for backups"
   exit 0
 else
