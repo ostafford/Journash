@@ -14,38 +14,37 @@ function detect_os() {
   fi
 }
 
-# Format date based on OS
-function format_date() {
-  local date_str=$1
-  local format=$2
-  local os=$(detect_os)
-  
-  if [[ "$os" == "macos" ]]; then
-    # macOS date command
-    date -j -f "%Y-%m-%d" "$date_str" "$format" 2>/dev/null || echo "$date_str"
-  elif [[ "$os" == "linux" ]]; then
-    # Linux date command
-    date -d "$date_str" "$format" 2>/dev/null || echo "$date_str"
-  else
-    # Fallback
-    echo "$date_str"
-  fi
-}
-
 # Format month based on OS
 function format_month() {
   local month=$1
   local os=$(detect_os)
   
   if [[ "$os" == "macos" ]]; then
-    # macOS date command
-    date -j -f "%Y-%m" "$month" "+%B %Y" 2>/dev/null || echo "$month"
+    # macOS date command - use first day of month
+    date -j -f "%Y-%m" "$month-01" "+%d/%m/%Y" 2>/dev/null || echo "$month"
   elif [[ "$os" == "linux" ]]; then
     # Linux date command
-    date -d "$month-01" "+%B %Y" 2>/dev/null || echo "$month"
+    date -d "$month-01" "+%d/%m/%Y" 2>/dev/null || echo "$month"
   else
     # Fallback
     echo "$month"
+  fi
+}
+
+# Format date based on OS
+function format_date() {
+  local date_str=$1
+  local os=$(detect_os)
+  
+  if [[ "$os" == "macos" ]]; then
+    # macOS date command (assumes date_str is in YYYY-MM-DD format)
+    date -j -f "%Y-%m-%d" "$date_str" "+%d/%m/%Y" 2>/dev/null || echo "$date_str"
+  elif [[ "$os" == "linux" ]]; then
+    # Linux date command
+    date -d "$date_str" "+%d/%m/%Y" 2>/dev/null || echo "$date_str"
+  else
+    # Fallback
+    echo "$date_str"
   fi
 }
 
@@ -109,7 +108,7 @@ function test_compatibility() {
   # Test date formatting
   echo "Testing date formatting..."
   local test_date="2023-01-15"
-  local formatted_date=$(format_date "$test_date" "+%B %d, %Y")
+  local formatted_date=$(format_date "$test_date" "+%d %B, %Y")
   echo "Sample date conversion: $test_date -> $formatted_date"
   
   if [[ "$all_commands_available" == true ]]; then

@@ -3,11 +3,15 @@
 # Journash - Coding Journal CLI
 # Journal entry viewing functions
 
+
 # Configuration variables
 JOURNAL_DIR="$HOME/.coding_journal"
 DATA_DIR="$JOURNAL_DIR/data"
+BIN_DIR="$JOURNAL_DIR/bin"
 CONFIG_DIR="$JOURNAL_DIR/config"
 SETTINGS_FILE="$CONFIG_DIR/settings.conf"
+
+UTILS_SCRIPT="$BIN_DIR/journal_utils.sh"
 
 # Source settings if they exist
 if [[ -f "$SETTINGS_FILE" ]]; then
@@ -16,6 +20,16 @@ else
   echo "Error: Settings file not found. Please run setup script first."
   exit 1
 fi
+
+# Source utility functions if available
+if [[ -f "$UTILS_SCRIPT" ]]; then
+  source "$UTILS_SCRIPT"
+else
+  echo "Warning: Utility script not found at $UTILS_SCRIPT"
+  # Fallback for format_month function
+  function format_month() { echo "$1"; }
+fi
+
 
 # Function to list all available journal files
 function list_journals() {
@@ -42,7 +56,7 @@ function list_journals() {
     local personal_count=$(grep -c "^## Personal Reflection" "$file")
     
     # Format month for display
-    local display_month=$(date -j -f "%Y-%m" "$month" "+%B %Y" 2>/dev/null || echo "$month")
+    local display_month=$(format_month "$month")
     
     echo "📔 $display_month: $entry_count entries ($coding_count coding, $personal_count personal)"
   done
@@ -62,8 +76,7 @@ function view_month() {
     return 1
   fi
   
-  echo "📖 Viewing entries for $(date -j -f "%Y-%m" "$month" "+%B %Y" 2>/dev/null || echo "$month")"
-  echo ""
+  echo "📖 Viewing entries for $(format_month "$month")"
   
   # Use less to display the file with formatting
   less -R "$file_path"
@@ -94,7 +107,7 @@ function search_entries() {
   for file in "${files[@]}"; do
     # Extract month from filename
     local month=$(basename "$file" .md)
-    local display_month=$(date -j -f "%Y-%m" "$month" "+%B %Y" 2>/dev/null || echo "$month")
+    local display_month=$(format_month "$month")
     
     # Search for term in the file and get matching lines with context
     local matches=$(grep -n -A 2 -B 2 -i "$search_term" "$file")
@@ -173,7 +186,7 @@ function show_stats() {
   done
   
   if [[ -n "$most_active_month" ]]; then
-    local display_month=$(date -j -f "%Y-%m" "$most_active_month" "+%B %Y" 2>/dev/null || echo "$most_active_month")
+    local display_month=$(format_month "$most_active_month")
     echo "Most active month: $display_month ($most_active_count entries)"
   fi
   
