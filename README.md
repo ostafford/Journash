@@ -13,7 +13,6 @@ Journash is a seamless CLI journaling system that:
 - Automatically prompts for journal entries when closing your IDE
 - Allows manual journal entries through simple terminal commands
 - Differentiates between coding and personal journal entries
-- Offers optional encryption for private entries
 - Organizes entries by date in an easily navigable structure
 - Integrates with Git for version control and backup
 
@@ -33,12 +32,6 @@ Journash is a seamless CLI journaling system that:
   - Gratitude reflection
   - Accomplishments
   - General thoughts
-
-### Security *(Decrypting issue known)*
-
-- Optional encryption for sensitive entries
-- Password-based security
-- Selective encryption to maintain performance
 
 ### Git Integration
 
@@ -61,7 +54,7 @@ The setup script will:
 1. Create necessary directories in `~/.coding_journal/`
 2. Configure initial settings
 3. Integrate with your zsh environment
-4. Set up optional features like encryption and Git integration
+4. Set up optional features like Git integration
 
 ## 📝 Usage
 
@@ -96,19 +89,6 @@ code_journal your_project/
 
 When your IDE closes, a new terminal window will open to create a coding journal entry.
 
-### Security Features
-
-```bash
-# Set up encryption for private entries
-journash security setup
-
-# Change encryption password
-journash security password
-
-# Check encryption status
-journash security status
-```
-
 ### Git Integration
 
 ```bash
@@ -136,7 +116,6 @@ $HOME/
     ├── bin/                      # Scripts directory
     │   ├── journal_main.sh       # Main script with core functions
     │   ├── journal_utils.sh      # Utility functions
-    │   ├── journal_security.sh   # Encryption functions
     │   └── journal_git.sh        # Git integration
     │
     ├── data/                     # Data directory
@@ -144,7 +123,6 @@ $HOME/
     │
     └── config/                   # Configuration directory
         ├── settings.conf         # User settings
-        ├── security.conf         # Password hash (if using encryption)
         └── git.conf              # Git configuration
 ```
 
@@ -153,7 +131,6 @@ $HOME/
 User preferences can be modified in the following files:
 
 - `~/.coding_journal/config/settings.conf` - General settings
-- `~/.coding_journal/config/security.conf` - Encryption settings
 - `~/.coding_journal/config/git.conf` - Git integration settings
 
 ## 🔄 Cross-Platform Compatibility
@@ -176,5 +153,4 @@ This project welcomes contributions and suggestions. Feel free to fork the repos
 
 - Inspired by the practice of keeping coding journals
 - Built with zsh scripts for cross-platform compatibility
-- Uses OpenSSL for encryption
 - Git for version control
