@@ -42,25 +42,92 @@ function journash() {
   $JOURNAL_SCRIPT "\$@"
 }
   
-# IDE wrapper function for auto-journaling
 function code_journal() {
+  # Source utility script for OS detection if available
+  if [[ -f "$HOME/.coding_journal/bin/journal_utils.sh" ]]; then
+    source "$HOME/.coding_journal/bin/journal_utils.sh"
+  else
+    function detect_os() { 
+      if [[ "$(uname)" == "Darwin" ]]; then echo "macos"; else echo "linux"; fi 
+    }
+  fi
+  
+  # Source settings for IDE preferences
+  if [[ -f "$HOME/.coding_journal/config/settings.conf" ]]; then
+    source "$HOME/.coding_journal/config/settings.conf"
+  else
+    # Default settings if not found
+    IDE_COMMAND="cursor"
+    IDE_ARGS="--wait"
+    TERMINAL_EMULATOR="iterm"
+  fi
+  
+  # Function to display post-IDE message and trigger journal
+  function post_ide_journal() {
+    clear
+    echo -e "\033[1;36m=============================\033[0m"
+    echo -e "\033[1;32m ✨ Coding session completed\033[0m"
+    echo -e "\033[1;36m=============================\033[0m"
+    echo ""
+    journash --post-ide
+  }
+  
   # Run the IDE opening and journal process in the background
   (
-    # Open Cursor with the --wait flag to block until it closes
-    cursor --wait "$@"
+    # Open the IDE with the configured command
+    $IDE_COMMAND $IDE_ARGS "$@"
     
-    # After Cursor closes, open a new iTerm window with colors
-    osascript -e '
-      tell application "iTerm"
-        create window with default profile
-        tell current window
-          tell current session
-            # Use proper escaping for both AppleScript and shell
-            write text "clear && echo \"\\033[1;36m=============================\\033[0m\" && echo \"\\033[1;32m ✨ Coding session completed\\033[0m\" && echo \"\\033[1;36m=============================\\033[0m\" && echo \"\" && journash --post-ide"
-          end tell
-        end tell
-      end tell
-    '
+    # After IDE closes, open a terminal for journaling based on OS
+    local os=$(detect_os)
+    
+    if [[ "$os" == "macos" ]]; then
+      # macOS using AppleScript
+      if [[ "$TERMINAL_EMULATOR" == "iterm" ]]; then
+        # Create a temporary script file to avoid quote issues
+        local tmp_script="/tmp/journash_post_ide_$$.sh"
+        echo '#!/bin/zsh
+clear
+echo -e "\033[1;36m=============================\033[0m"
+echo -e "\033[1;32m ✨ Coding session completed\033[0m"
+echo -e "\033[1;36m=============================\033[0m"
+echo ""
+journash --post-ide
+' > "$tmp_script"
+        chmod +x "$tmp_script"
+        
+        # Launch iTerm with the script
+        osascript -e "tell application \"iTerm\"
+          create window with default profile
+            tell current window
+              tell current session
+                write text \"$tmp_script\"
+              end tell
+            end tell
+          end tell"
+        
+        # Clean up
+        sleep 3
+        rm "$tmp_script"
+      elif [[ "$TERMINAL_EMULATOR" == "terminal" ]]; then
+        # Alternative for Terminal.app
+        osascript -e "tell application \"Terminal\" to do script \"journash --post-ide\""
+      else
+        # Fallback to command line
+        post_ide_journal
+      fi
+    else
+      # Linux using various terminal emulators
+      if [[ "$TERMINAL_EMULATOR" == "gnome-terminal" ]]; then
+        gnome-terminal -- bash -c "$(declare -f post_ide_journal); post_ide_journal; exec bash"
+      elif [[ "$TERMINAL_EMULATOR" == "konsole" ]]; then
+        konsole --noclose -e bash -c "$(declare -f post_ide_journal); post_ide_journal"
+      elif [[ "$TERMINAL_EMULATOR" == "xterm" ]]; then
+        xterm -e "$(declare -f post_ide_journal); post_ide_journal; bash"
+      else
+        # Fallback to command line
+        post_ide_journal
+      fi
+    fi
   ) &
   
   # Disown the process so it continues running even if terminal is closed
