@@ -3,11 +3,6 @@
 # Journash - Coding Journal CLI
 # Setup script to establish directory structure
 
-# Add these settings to the settings.conf template:
-IDE_COMMAND="cursor"        # Command to open the IDE
-IDE_ARGS="--wait"           # Arguments for the IDE command
-TERMINAL_EMULATOR="iterm"   # Terminal emulator (iterm, gnome-terminal, konsole, etc.)
-
 echo "🚀 Setting up Journash - Coding Journal CLI..."
 
 # Define the main directory for the journal
@@ -31,16 +26,17 @@ for dir in "bin" "data" "config"; do
   fi
 done
 
-
 # Create default settings.conf if it doesn't exist
 SETTINGS_FILE="$JOURNAL_DIR/config/settings.conf"
 if [[ ! -f "$SETTINGS_FILE" ]]; then
   echo "Creating default settings file: $SETTINGS_FILE"
   cat > "$SETTINGS_FILE" << EOF
-
-
-
 # Journash Configuration File
+
+# IDE Settings
+IDE_COMMAND="cursor"        # Command to open the IDE
+IDE_ARGS="--wait"           # Arguments for the IDE command
+TERMINAL_EMULATOR="iterm"   # Terminal emulator (iterm, gnome-terminal, konsole, etc.)
 
 # Journal Settings
 AUTO_JOURNAL_ENABLED=true       # Enable/disable auto-journaling after IDE closes
@@ -80,12 +76,12 @@ if ! grep -q "# Journash Integration" "$HOME/.zshrc"; then
   echo "Setting up Zsh integration..."
   
   # Add integration to zshrc
-  cat >> "$HOME/.zshrc" << EOF
+  cat >> "$HOME/.zshrc" << 'EOF'
 
 # Journash Integration
 # Function to allow 'journash' command
 function journash() {
-  "$JOURNAL_DIR/bin/journal_main.sh" "\$@"
+  "$HOME/.coding_journal/bin/journal_main.sh" "$@"
 }
 
 function code_journal() {
@@ -144,9 +140,8 @@ function code_journal() {
         # Make it executable
         chmod 700 "$tmp_script"
         
-        # Add content to the script
-        cat > "$tmp_script" << 'EOFSCRIPT'
-cat > "$tmp_script" << 'EOFSCRIPT'
+        # Add content to the script - FIXED the nested cat issue
+        cat > "$tmp_script" << EOFSCRIPT
 #!/bin/zsh
 clear
 echo -e "\033[1;36m=============================\033[0m"
@@ -160,7 +155,7 @@ EOFSCRIPT
           create window with default profile
           tell current window
             tell current session
-              write text \"$tmp_script\; journash --post-ide\"
+              write text \"$tmp_script; journash --post-ide\"
             end tell
           end tell
         end tell"
@@ -215,18 +210,26 @@ if [[ ! -f "$JOURNAL_DIR/data/$(date +%Y-%m).md" ]]; then
   
   # Create the file with a header
   cat > "$JOURNAL_DIR/data/$(date +%Y-%m).md" << EOF
-# Journal Entries for $MONTH_YEAR
+# Coding Journal Entries for $MONTH_YEAR
 
-## Personal Reflection - $(date +"%Y-%m-%d %H:%M")
+## Coding Session - $(date +"%Y-%m-%d %H:%M")
 
-**Grateful for**: 
-Welcome to Journash! This is a sample entry to help you get started.
+**Duration**: 1h 30m
 
-**Accomplished**: 
-Successfully set up Journash, a CLI journaling system for tracking your coding journey.
+**Worked on**: 
+Setting up Journash, a CLI journaling system for tracking coding progress.
 
-**Thoughts**: 
-This is just the beginning. Use 'journash help' to see all available commands.
+**Challenges**: 
+Getting cross-platform compatibility working between macOS and Linux.
+
+**Solutions**: 
+Created utility functions that detect the OS and adapt commands accordingly.
+
+**Learned**: 
+AppleScript can be used to open new terminal windows with specific commands.
+
+**Next Steps**: 
+Test the system with daily use and improve error handling.
 
 ---
 
@@ -242,7 +245,6 @@ echo "Testing system compatibility..."
 # Check for required utilities
 echo "Checking for required utilities..."
 
-
 # Check for Git (required for version control)
 if ! command -v git &> /dev/null; then
   echo "⚠️ Warning: Git is not installed. Version control features will not be available."
@@ -253,10 +255,7 @@ fi
 
 # Feature setup questions
 echo ""
-echo "Would you like to set up the following features?"
-
-# Git repository
-echo "2. Git repository: Version control and backups (y/n)"
+echo "Would you like to set up Git repository for version control and backups? (y/n)"
 read setup_git
 
 if [[ "$setup_git" == "y" || "$setup_git" == "Y" ]]; then
@@ -282,13 +281,14 @@ if [[ "$setup_git" == "y" || "$setup_git" == "Y" ]]; then
 fi
 
 echo "✅ Journash setup complete!"
-echo "You can now use 'journash' to create journal entries."
+echo "You can now use 'journash' to create coding journal entries."
 echo "Try 'journash help' to see all available commands."
 echo ""
 echo "Quick start:"
-echo "  journash code            - Create a coding journal entry"
-echo "  journash view            - View your journal entries"
-echo "  journash git             - Manage git repository for backups"
+echo "  journash                - Create a coding journal entry"
+echo "  journash view           - View your journal entries"
+echo "  journash git            - Manage git repository for backups"
 echo ""
 echo "For automatic journaling when closing your IDE:"
-echo "  Use 'code_journal' instead of 'code' to launch your IDE of choice"
+echo "  Use 'code_journal' instead of your normal IDE command to launch your IDE"
+echo "  For example: code_journal ~/projects/my-capstone-project"

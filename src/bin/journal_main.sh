@@ -5,7 +5,6 @@
 
 # Configuration variables
 JOURNAL_DIR="$HOME/.coding_journal"
-
 CONFIG_DIR="$JOURNAL_DIR/config"
 DATA_DIR="$JOURNAL_DIR/data"
 BIN_DIR="$JOURNAL_DIR/bin"
@@ -28,6 +27,7 @@ else
   }
   function format_month() { echo "$1"; }
   function print_line() { echo "----------------------"; }
+  function log_message() { echo "$1"; }
 fi
 
 # ================================
@@ -40,7 +40,6 @@ else
   exit 1
 fi
 
-
 # ======================================
 # Source git configuration if it exists
 # ======================================
@@ -51,99 +50,57 @@ else
   GIT_AUTO_COMMIT=false
 fi
 
-# =====================================
-# Function to collect multi-line input
-# =====================================
-function read_multiline() {
-  local prompt=$1
-  
-  echo "$prompt (Press Ctrl+D on a new line when finished)"
-  # Using process substitution to capture output directly
-  input=$(cat)
-  echo "$input"
-}
-
 # ===================================
 # Function to create a journal entry
 # ===================================
-function create_journal_entry() {
-  local entry_type=$1  # "coding" or "personal"
+function create_coding_journal_entry() {
   local date_str=$(date +"%Y-%m-%d %H:%M")
   local file_name=$(date +"$JOURNAL_FILE_FORMAT")
   local file_path="$DATA_DIR/$file_name"
   
-  # Create header based on entry type
-  if [[ "$entry_type" == "coding" ]]; then
-    echo "$PROMPT_SYMBOL Coding Journal - $date_str"
-    echo "Creating a new coding journal entry..."
-  else
-    echo "$PROMPT_SYMBOL Personal Journal - $date_str"
-    echo "Creating a new personal journal entry..."
-  fi
+  echo "$PROMPT_SYMBOL Coding Journal - $date_str"
+  echo "Creating a new coding journal entry..."
   
-  # Collect journal content
-  local entry_content=""
+  # =======================
+  # Coding journal prompts
+  # =======================
+  echo "How long was your coding session? (e.g. 2h 30m)"
+  read session_duration
   
-  if [[ "$entry_type" == "coding" ]]; then
-    # =======================
-    # Coding journal prompts
-    # =======================
-    echo "How long was your coding session? (e.g. 2h 30m)"
-    read session_duration
-    
-    echo "What did you work on today? (Press Ctrl+D on a new line when finished)"
-    work_description=$(cat)
-    
-    echo "What challenges did you face? (Press Ctrl+D on a new line when finished)"
-    challenges=$(cat)
-    
-    echo "What solutions did you discover? (Press Ctrl+D on a new line when finished)"
-    solutions=$(cat)
-    
-    echo "What did you learn today? (Press Ctrl+D on a new line when finished)"
-    learnings=$(cat)
-    
-    echo "What are your next steps? (Press Ctrl+D on a new line when finished)"
-    next_steps=$(cat)
-    
-    # Format the entry in Markdown
-    entry_content="## Coding Session - $date_str\n\n"
-    entry_content+="**Duration**: $session_duration\n\n"
-    entry_content+="**Worked on**: \n$work_description\n\n"
-    entry_content+="**Challenges**: \n$challenges\n\n"
-    entry_content+="**Solutions**: \n$solutions\n\n"
-    entry_content+="**Learned**: \n$learnings\n\n"
-    entry_content+="**Next Steps**: \n$next_steps\n\n"
-    entry_content+="---\n\n"
-  else
-    # =========================
-    # Personal journal prompts
-    # =========================
-    echo "What are you most grateful for today? (Press Ctrl+D on a new line when finished)"
-    gratitude=$(cat)
-    
-    echo "What did you accomplish today? (Press Ctrl+D on a new line when finished)"
-    accomplishments=$(cat)
-    
-    echo "What's on your mind? (Press Ctrl+D on a new line when finished)"
-    thoughts=$(cat)
-    
-    # Format the entry in Markdown
-    entry_content="## Personal Reflection - $date_str\n\n"
-    entry_content+="**Grateful for**: \n$gratitude\n\n"
-    entry_content+="**Accomplished**: \n$accomplishments\n\n"
-    entry_content+="**Thoughts**: \n$thoughts\n\n"
-    entry_content+="---\n\n"
-  fi
+  echo "What did you work on today? (Press Ctrl+D on a new line when finished)"
+  work_description=$(cat)
+  
+  echo "What challenges did you face? (Press Ctrl+D on a new line when finished)"
+  challenges=$(cat)
+  
+  echo "What solutions did you discover? (Press Ctrl+D on a new line when finished)"
+  solutions=$(cat)
+  
+  echo "What did you learn today? (Press Ctrl+D on a new line when finished)"
+  learnings=$(cat)
+  
+  echo "What are your next steps? (Press Ctrl+D on a new line when finished)"
+  next_steps=$(cat)
+  
+  # Format the entry in Markdown
+  local entry_content="## Coding Session - $date_str\n\n"
+  entry_content+="**Duration**: $session_duration\n\n"
+  entry_content+="**Worked on**: \n$work_description\n\n"
+  entry_content+="**Challenges**: \n$challenges\n\n"
+  entry_content+="**Solutions**: \n$solutions\n\n"
+  entry_content+="**Learned**: \n$learnings\n\n"
+  entry_content+="**Next Steps**: \n$next_steps\n\n"
+  entry_content+="---\n\n"
   
   # Save the entry to file
   if [[ ! -f "$file_path" ]]; then
     # Create new file with header if it doesn't exist
-    echo "# Journal Entries for $(date +"%B %Y")\n\n" > "$file_path"
+    echo "# Coding Journal Entries for $(date +"%B %Y")\n\n" > "$file_path"
   fi
   
   # Append the entry to the file
   echo "$entry_content" >> "$file_path"
+  
   echo "✅ Journal entry saved to $file_path"
 
   # Commit changes if git is enabled
@@ -173,19 +130,15 @@ function list_journals() {
     local month=$(basename "$file" .md)
     
     # Count entries in the file
-    local entry_count=$(grep -c "^## " "$file")
-    
-    # Count coding vs personal entries
-    local coding_count=$(grep -c "^## Coding Session" "$file")
-    local personal_count=$(grep -c "^## Personal Reflection" "$file")
+    local entry_count=$(grep -c "^## Coding Session" "$file")
     
     # Format month for display
     local display_month=$(format_month "$month")
-    echo "📔 $display_month: $entry_count entries ($coding_count coding, $personal_count personal)"
+    echo "📔 $display_month: $entry_count entries"
   done
   
   echo ""
-  echo "Use 'journash view YYYY-MM' to view a specific entry."
+  echo "Use 'journash view YYYY-MM' to view a specific month."
 }
 
 # ==============================================
@@ -207,9 +160,9 @@ function view_month() {
   echo "📖 Viewing entries for $display_month"
   echo ""
   
-
   less -R "$file_path"
 }
+
 # ===========================================
 # Function to search through journal entries
 # ===========================================
@@ -262,6 +215,10 @@ function search_entries() {
       results_found=true
     fi
   done
+  
+  if [[ "$results_found" == "false" ]]; then
+    echo "No matches found for '$search_term'."
+  fi
 }
 
 # =====================================
@@ -280,23 +237,14 @@ function show_stats() {
   fi
   
   local total_entries=0
-  local coding_entries=0
-  local personal_entries=0
   
   for file in "${files[@]}"; do
     # Count entries in each file
-    local file_entries=$(grep -c "^## " "$file")
-    local file_coding=$(grep -c "^## Coding Session" "$file")
-    local file_personal=$(grep -c "^## Personal Reflection" "$file")
-    
+    local file_entries=$(grep -c "^## Coding Session" "$file")
     total_entries=$((total_entries + file_entries))
-    coding_entries=$((coding_entries + file_coding))
-    personal_entries=$((personal_entries + file_personal))
   done
   
-  echo "Total journal entries: $total_entries"
-  echo "Coding journal entries: $coding_entries"
-  echo "Personal journal entries: $personal_entries"
+  echo "Total coding journal entries: $total_entries"
   
   # Find the most active month
   local most_active_month=""
@@ -304,7 +252,7 @@ function show_stats() {
   
   for file in "${files[@]}"; do
     local month=$(basename "$file" .md)
-    local count=$(grep -c "^## " "$file")
+    local count=$(grep -c "^## Coding Session" "$file")
     
     if [[ $count -gt $most_active_count ]]; then
       most_active_month=$month
@@ -332,18 +280,10 @@ function show_stats() {
   echo ""
 }
 
-
-
 # Process command line arguments
-if [[ $# -eq 0 ]]; then
-  # No arguments, default to personal journal
-  create_journal_entry "personal"
-elif [[ "$1" == "code" || "$1" == "coding" ]]; then
-  # Create coding journal entry
-  create_journal_entry "coding"
-elif [[ "$1" == "personal" ]]; then
-  # Create personal journal entry
-  create_journal_entry "personal"
+if [[ $# -eq 0 || "$1" == "code" || "$1" == "coding" ]]; then
+  # Default to coding journal
+  create_coding_journal_entry
 elif [[ "$1" == "view" ]]; then
   # Viewing functions
   if [[ $# -eq 1 ]]; then
@@ -352,21 +292,13 @@ elif [[ "$1" == "view" ]]; then
   elif [[ "$2" =~ ^[0-9]{4}-[0-9]{2}$ ]]; then
     # View specific month
     view_month "$2"
-  elif [[ "$2" == "search" && -n "$3" ]]; then
-    # Search for term
-    search_entries "$3"
-  elif [[ "$2" == "stats" ]]; then
-    # Show statistics
-    show_stats
   else
     echo "Usage: journash view [OPTION]"
-    echo "View and search journal entries."
+    echo "View journal entries."
     echo ""
     echo "Options:"
     echo "  (no option)    List all available journals"
     echo "  YYYY-MM        View entries for specific month"
-    echo "  search TERM    Search for a term across all entries"
-    echo "  stats          Show journal statistics"
   fi
 elif [[ "$1" == "search" && -n "$2" ]]; then
   # Direct search command
@@ -393,34 +325,31 @@ elif [[ "$1" == "test" ]]; then
     exit 1
   fi
 elif [[ "$1" == "--post-ide" ]]; then
-  # Called after IDE closes (same as coding)
-  create_journal_entry "coding"
+  # Called after IDE closes
+  create_coding_journal_entry
 elif [[ "$1" == "help" || "$1" == "--help" ]]; then
-
   # =========================
   # Display help information
   # =========================
   echo "Usage: journash [COMMAND]"
-  echo "A simple CLI journaling system."
+  echo "A CLI system for tracking your coding journey."
   echo ""
   echo "Commands:"
-  echo "  code, coding       Create a coding journal entry"
-  echo "  personal           Create a personal journal entry"
-  echo "  view               List all available journals"
-  echo "  view YYYY-MM       View entries for specific month"
-  echo "  search TERM        Search for a term across all entries"
-  echo "  stats              Show journal statistics"
-  echo "  git                Manage git repository for backups"
-  echo "  test               Test system compatibility"
-  echo "  help               Show this help message"
+  echo "  (no option)         Create a coding journal entry"
+  echo "  view                List all available journals"
+  echo "  view YYYY-MM        View entries for specific month"
+  echo "  search TERM         Search for a term across all entries"
+  echo "  stats               Show journal statistics"
+  echo "  git                 Manage git repository for backups"
+  echo "  test                Test system compatibility"
+  echo "  help                Show this help message"
   echo ""
   echo "Examples:"
-  echo "  journash code                # Create a coding journal entry"
-  echo "  journash personal            # Create a personal journal entry"
-  echo "  journash view                # List all available journals"
-  echo "  journash view 04-2025        # View entries from April 2025"
-  echo "  journash search \"python\"     # Search for entries containing 'python'"
-  echo "  journash git init            # Initialize git repository for backups"
+  echo "  journash                   # Create a coding journal entry"
+  echo "  journash view              # List all available journals"
+  echo "  journash view 2025-04      # View entries from April 2025"
+  echo "  journash search \"python\"   # Search for entries containing 'python'"
+  echo "  journash git init          # Initialize git repository for backups"
   exit 0
 else
   # Unknown argument
