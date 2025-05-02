@@ -4,7 +4,7 @@
 # [Component name] functionality
 
 # Configuration variables
-JOURNAL_DIR="$HOME/.coding_journal"
+JOURNAL_DIR="$HOME/.coding_journal" 
 CONFIG_DIR="$JOURNAL_DIR/config"
 DATA_DIR="$JOURNAL_DIR/data"
 BIN_DIR="$JOURNAL_DIR/bin"

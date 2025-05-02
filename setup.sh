@@ -55,6 +55,10 @@ SCRIPT_FILES=(
   "journal_main.sh"
   "journal_utils.sh"
   "journal_git.sh"
+  "journal_entry.sh"
+  "journal_view.sh"
+  "journal_search.sh"
+  "journal_stats.sh"
 )
 
 for script in "${SCRIPT_FILES[@]}"; do
