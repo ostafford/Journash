@@ -36,14 +36,14 @@ if [[ ! -f "$SETTINGS_FILE" ]]; then
 # IDE Settings
 IDE_COMMAND="cursor"        # Command to open the IDE
 IDE_ARGS="--wait"           # Arguments for the IDE command
-TERMINAL_EMULATOR="iterm"   # Terminal emulator (iterm, gnome-terminal, konsole, etc.)
+TERMINAL_EMULATOR="iterm"   # Terminal emulator
 
 # Journal Settings
-AUTO_JOURNAL_ENABLED=true       # Enable/disable auto-journaling after IDE closes
-JOURNAL_FILE_FORMAT="%Y-%m.md"  # Date format for journal files
+AUTO_JOURNAL_ENABLED=true           # Enable/disable auto-journaling after IDE closes
+JOURNAL_FILE_FORMAT="%d-%m-%Y.md"   # Date format for journal files
 
 # Appearance
-PROMPT_SYMBOL="📝"              # Symbol to use in journal prompts
+PROMPT_SYMBOL="📝"                  # Symbol to use in journal prompts
 EOF
   echo "Default settings configured."
 else
@@ -205,42 +205,6 @@ else
   echo "Journash integration already exists in ~/.zshrc"
 fi
 
-# Create a sample journal entry for testing if no entries exist
-if [[ ! -f "$JOURNAL_DIR/data/$(date +%Y-%m).md" ]]; then
-  echo "Creating a sample journal entry for testing..."
-  
-  # Format the current month and year
-  MONTH_YEAR=$(date +"%B %Y")
-  
-  # Create the file with a header
-  cat > "$JOURNAL_DIR/data/$(date +%Y-%m).md" << EOF
-# Coding Journal Entries for $MONTH_YEAR
-
-## Coding Session - $(date +"%Y-%m-%d %H:%M")
-
-**Duration**: 1h 30m
-
-**Worked on**: 
-Setting up Journash, a CLI journaling system for tracking coding progress.
-
-**Challenges**: 
-Getting cross-platform compatibility working between macOS and Linux.
-
-**Solutions**: 
-Created utility functions that detect the OS and adapt commands accordingly.
-
-**Learned**: 
-AppleScript can be used to open new terminal windows with specific commands.
-
-**Next Steps**: 
-Test the system with daily use and improve error handling.
-
----
-
-EOF
-
-  echo "Sample entry created."
-fi
 
 # Test system compatibility
 echo "Testing system compatibility..."
@@ -267,6 +231,7 @@ if [[ "$setup_git" == "y" || "$setup_git" == "Y" ]]; then
   if command -v git &> /dev/null; then
     "$JOURNAL_DIR/bin/journal_git.sh" init
     
+    
     echo "Would you like to set up a remote repository for cloud backup? (y/n)"
     read setup_remote
     
@@ -286,7 +251,7 @@ fi
 
 echo "✅ Journash setup complete!"
 echo "You can now use 'journash' to create coding journal entries."
-echo "Try 'journash help' to see all available commands."
+echo "Type 'journash help' to see all available commands."
 echo ""
 echo "Quick start:"
 echo "  journash                - Create a coding journal entry"
@@ -295,4 +260,4 @@ echo "  journash git            - Manage git repository for backups"
 echo ""
 echo "For automatic journaling when closing your IDE:"
 echo "  Use 'code_journal' instead of your normal IDE command to launch your IDE"
-echo "  For example: code_journal ~/projects/my-capstone-project"
+echo "  For example: code_journal ~/projects/my-project-name"

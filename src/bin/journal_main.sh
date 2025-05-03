@@ -1,5 +1,6 @@
 #!/bin/zsh
 
+
 # Journash - Coding Journal CLI
 # Main script file that provides core functionality
 
@@ -19,7 +20,32 @@ source "$BIN_DIR/journal_entry.sh"
 source "$BIN_DIR/journal_view.sh"
 source "$BIN_DIR/journal_search.sh"
 source "$BIN_DIR/journal_stats.sh"
-# etc.
+
+# =========================
+# Display help information
+# =========================
+function show_help() {
+  echo "Usage: journash [COMMAND]"
+  echo "A CLI system for tracking your coding journey."
+  echo ""
+  echo "Commands:"
+  echo "  (no option)         Create a coding journal entry"
+  echo "  view                List all available journals"
+  echo "  view YYYY-MM        View entries for specific month"
+  echo "  search TERM         Search for a term across all entries"
+  echo "  stats               Show journal statistics"
+  echo "  git                 Manage git repository for backups"
+  echo "  test                Test system compatibility"
+  echo "  help                Show this help message"
+  echo ""
+  echo "Examples:"
+  echo "  journash                   # Create a coding journal entry"
+  echo "  journash view              # List all available journals"
+  echo "  journash view 2025-04      # View entries from April 2025"
+  echo "  journash search \"python\"   # Search for entries containing 'python'"
+  echo "  journash git init          # Initialize git repository for backups"
+  exit 0
+}
 
 # ======================================
 # Source utility functions if available
@@ -60,30 +86,21 @@ fi
 
 
 # Process command line arguments
-if [[ $# -eq 0 || "$1" == "code" || "$1" == "coding" ]]; then
-  # Default to coding journal
+if [[ $# -eq 0 ]]; then
+  # No arguments, default to coding journal
+  create_coding_journal_entry
+elif [[ "$1" == "code" || "$1" == "coding" ]]; then
+  # Create coding journal entry
   create_coding_journal_entry
 elif [[ "$1" == "view" ]]; then
-  # Viewing functions
-  if [[ $# -eq 1 ]]; then
-    # List all journals
-    list_journals
-  elif [[ "$2" =~ ^[0-9]{4}-[0-9]{2}$ ]]; then
-    # View specific month
-    view_month "$2"
-  else
-    echo "Usage: journash view [OPTION]"
-    echo "View journal entries."
-    echo ""
-    echo "Options:"
-    echo "  (no option)    List all available journals"
-    echo "  YYYY-MM        View entries for specific month"
-  fi
+  # Viewing commands - pass to view component
+  shift  # Remove 'view' from arguments
+  process_view_command "$@"
 elif [[ "$1" == "search" && -n "$2" ]]; then
-  # Direct search command
+  # Search commands - pass to search component
   search_entries "$2"
 elif [[ "$1" == "stats" ]]; then
-  # Direct stats command
+  # Stats commands - pass to stats component
   show_stats
 elif [[ "$1" == "git" ]]; then
   # Git integration commands
@@ -104,32 +121,11 @@ elif [[ "$1" == "test" ]]; then
     exit 1
   fi
 elif [[ "$1" == "--post-ide" ]]; then
-  # Called after IDE closes
+  # Called after IDE closes - pass to entry component
   create_coding_journal_entry
 elif [[ "$1" == "help" || "$1" == "--help" ]]; then
-  # =========================
   # Display help information
-  # =========================
-  echo "Usage: journash [COMMAND]"
-  echo "A CLI system for tracking your coding journey."
-  echo ""
-  echo "Commands:"
-  echo "  (no option)         Create a coding journal entry"
-  echo "  view                List all available journals"
-  echo "  view YYYY-MM        View entries for specific month"
-  echo "  search TERM         Search for a term across all entries"
-  echo "  stats               Show journal statistics"
-  echo "  git                 Manage git repository for backups"
-  echo "  test                Test system compatibility"
-  echo "  help                Show this help message"
-  echo ""
-  echo "Examples:"
-  echo "  journash                   # Create a coding journal entry"
-  echo "  journash view              # List all available journals"
-  echo "  journash view 2025-04      # View entries from April 2025"
-  echo "  journash search \"python\"   # Search for entries containing 'python'"
-  echo "  journash git init          # Initialize git repository for backups"
-  exit 0
+  show_help
 else
   # Unknown argument
   echo "Unknown command: $1"

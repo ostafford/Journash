@@ -16,7 +16,7 @@ LOG_FILE="$JOURNAL_DIR/journash.log"
 function log_message() {
   local level=$1
   local message=$2
-  local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+  local timestamp=$(date +"%d-%m-%Y %H:%M:%S")
   
   # Create log directory if it doesn't exist
   if [[ ! -d "$(dirname "$LOG_FILE")" ]]; then
@@ -218,7 +218,7 @@ function test_compatibility() {
   
   # Test date formatting
   echo "Testing date formatting..."
-  local test_date="2023-01-15"
+  local test_date="15-01-2025"
   local formatted_date=$(format_date "$test_date")
   echo "Sample date conversion: $test_date -> $formatted_date"
   

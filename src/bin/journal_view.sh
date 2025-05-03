@@ -95,29 +95,3 @@ function process_view_command() {
     # Help text
   fi
 }
-
-# Process command line arguments
-if [[ $# -eq 0 ]]; then
-  # No arguments, list all journals
-  list_journals
-elif [[ "$1" =~ ^[0-9]{4}-[0-9]{2}$ ]]; then
-  # View specific month (YYYY-MM format)
-  view_month "$1"
-elif [[ "$1" == "search" && -n "$2" ]]; then
-  # Search for term
-  search_entries "$2"
-elif [[ "$1" == "stats" ]]; then
-  # Show statistics
-  show_stats
-else
-  # Unknown argument
-  echo "Usage: journash view [OPTION]"
-  echo "View and search journal entries."
-  echo ""
-  echo "Options:"
-  echo "  (no option)    List all available journals"
-  echo "  YYYY-MM        View entries for specific month"
-  echo "  search TERM    Search for a term across all entries"
-  echo "  stats          Show journal statistics"
-  exit 1
-fi

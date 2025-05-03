@@ -81,7 +81,7 @@ function init_repository() {
   
   # Initialize git repository
   log_info "Initializing git repository in $JOURNAL_DIR..."
-  if ! safe_exec "git init" "Failed to initialize git repository"; then
+  if ! safe_exec "git init -b main" "Failed to initialize git repository"; then
     return 1
   fi
   
@@ -111,6 +111,13 @@ EOF
   if ! safe_exec "git commit -m \"Initial commit - Journash setup\"" "Failed to create initial commit"; then
     return 1
   fi
+
+  # # Rename the default branch to main
+  # if ! safe_exec "git branch -M main" "Failed to rename branch to main"; then
+  #   log_warning "Could not rename branch to 'main', using default branch name"
+  # else
+  #   log_info "Default branch renamed to 'main'"
+  # fi
   
   # Create git configuration file
   log_info "Creating git configuration file..."
@@ -166,7 +173,7 @@ function commit_changes() {
   fi
   
   # Commit with timestamp
-  if ! safe_exec "git commit -m \"Journal update - $(date +"%Y-%m-%d %H:%M")\"" "Failed to commit changes"; then
+  if ! safe_exec "git commit -m \"Journal update - $(date +"%d-%m-%Y %H:%M")\"" "Failed to commit changes"; then
     return 1
   fi
   
@@ -275,7 +282,7 @@ function push_changes() {
   fi
   
   # Try to detect current branch
-  local current_branch=$(git symbolic-ref --short HEAD 2>/dev/null || echo "master")
+  local current_branch=$(git symbolic-ref --short HEAD 2>/dev/null || echo "main")
   
   # Push to remote
   log_info "Pushing changes to remote repository..."
@@ -284,14 +291,14 @@ function push_changes() {
     return 0
   else
     # Try alternate branch name if fails
-    if [[ "$current_branch" == "master" ]]; then
+    if [[ "$current_branch" == "main" ]]; then
       if git push origin main 2>/dev/null; then
         log_info "✅ Changes pushed successfully to 'main' branch!"
         return 0
       fi
     elif [[ "$current_branch" == "main" ]]; then
-      if git push origin master 2>/dev/null; then
-        log_info "✅ Changes pushed successfully to 'master' branch!"
+      if git push origin main 2>/dev/null; then
+        log_info "✅ Changes pushed successfully to 'main' branch!"
         return 0
       fi
     fi
@@ -370,9 +377,9 @@ if [[ $# -eq 0 || "$1" == "help" ]]; then
   echo "  help              Show this help message"
   echo ""
   echo "Examples:"
-  echo "  journash git init                                       # Initialize git repository"
-  echo "  journash git remote https://github.com/username/repo.git # Set up remote repository"
-  echo "  journash git commit                                     # Commit changes"
+  echo "  journash git init                                         # Initialize git repository"
+  echo "  journash git remote https://github.com/username/repo.git  # Set up remote repository"
+  echo "  journash git commit                                       # Commit changes"
 elif [[ "$1" == "init" ]]; then
   init_repository
 elif [[ "$1" == "commit" ]]; then
@@ -385,6 +392,6 @@ elif [[ "$1" == "status" ]]; then
   show_status
 else
   log_error "Unknown command: $1"
-  log_error "Try 'journash git help' for more information."
+  log_error "Type 'journash git help' for more information."
   exit 1
 fi

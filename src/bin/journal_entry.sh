@@ -36,12 +36,17 @@ fi
 # Function to create a journal entry
 # ===================================
 function create_coding_journal_entry() {
-  local date_str=$(date +"%Y-%m-%d %H:%M")
+  local date_str=$(date +"%d-%m-%Y %H:%M")
   local file_name=$(date +"$JOURNAL_FILE_FORMAT")
   local file_path="$DATA_DIR/$file_name"
   
   echo "$PROMPT_SYMBOL Coding Journal - $date_str"
   echo "Creating a new coding journal entry..."
+  echo ""
+  echo -e "\033[48;5;95;38;5;214m|==================================================|\033[0m"
+  echo -e "\033[48;5;95;38;5;214m|===| Press Ctrl+D on a new line when finished |===|\033[0m"
+  echo -e "\033[48;5;95;38;5;214m|==================================================|\033[0m"
+  echo ""
   
   # =======================
   # Coding journal prompts
@@ -49,19 +54,19 @@ function create_coding_journal_entry() {
   echo "How long was your coding session? (e.g. 2h 30m)"
   read session_duration
   
-  echo "What did you work on today? (Press Ctrl+D on a new line when finished)"
+  echo "What did you work on today?"
   work_description=$(cat)
   
-  echo "What challenges did you face? (Press Ctrl+D on a new line when finished)"
+  echo "What challenges did you face?"
   challenges=$(cat)
   
-  echo "What solutions did you discover? (Press Ctrl+D on a new line when finished)"
+  echo "What solutions did you discover?"
   solutions=$(cat)
   
-  echo "What did you learn today? (Press Ctrl+D on a new line when finished)"
+  echo "What did you learn today?"
   learnings=$(cat)
   
-  echo "What are your next steps? (Press Ctrl+D on a new line when finished)"
+  echo "What are your next steps?"
   next_steps=$(cat)
   
   # Format the entry in Markdown
@@ -77,7 +82,7 @@ function create_coding_journal_entry() {
   # Save the entry to file
   if [[ ! -f "$file_path" ]]; then
     # Create new file with header if it doesn't exist
-    echo "# Coding Journal Entries for $(date +"%B %Y")\n\n" > "$file_path"
+    echo "# Coding Journal Entries for $(date +"%d-%m-%Y")\n\n" > "$file_path"
   fi
   
   # Append the entry to the file
