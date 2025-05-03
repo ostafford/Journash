@@ -80,19 +80,33 @@ function detect_os() {
   fi
 }
 
-# Format month based on OS for better display
+# Format month based on OS without calling external date command
 function format_month() {
-  local month=$1  # Assumes YYYY-MM input format
-  local os=$(detect_os)
+  local month=$1  # Assumes format like "DD-MM-YYYY"
   
-  if [[ "$os" == "macos" ]]; then
-    # Convert to DD-MM-YYYY format (first day of month)
-    date -j -f "%Y-%m" "$month-01" "+%d-%m-%Y" 2>/dev/null || echo "$month"
-  elif [[ "$os" == "linux" ]]; then
-    date -d "$month-01" "+%d-%m-%Y" 2>/dev/null || echo "$month"
-  else
+  # If it's already in DD-MM-YYYY format, no need to convert
+  if [[ "$month" =~ ^[0-9]{2}-[0-9]{2}-[0-9]{4}$ ]]; then
     echo "$month"
+    return 0
   fi
+  
+  # If it's in YYYY-MM format, create a nicer display format
+  if [[ "$month" =~ ^[0-9]{4}-[0-9]{2}$ ]]; then
+    # Extract year and month
+    local year=${month:0:4}
+    local month_num=${month:5:2}
+    
+    # Convert month number to name using arrays
+    local month_names=("" "January" "February" "March" "April" "May" "June" 
+                      "July" "August" "September" "October" "November" "December")
+    local month_name=${month_names[${month_num#0}]}
+    
+    echo "01-${month_num}-${year} (${month_name} ${year})"
+    return 0
+  fi
+  
+  # If format not recognized, return as is
+  echo "$month"
 }
 
 # Format date based on OS

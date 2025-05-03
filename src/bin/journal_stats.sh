@@ -47,28 +47,32 @@ function show_stats() {
   fi
   
   local total_entries=0
-  
-  for file in "${files[@]}"; do
-    # Count entries in each file
-    local file_entries=$(grep -c "^## Coding Session" "$file")
-    total_entries=$((total_entries + file_entries))
-  done
-  
-  echo "Total coding journal entries: $total_entries"
-  
-  # Find the most active month
   local most_active_month=""
   local most_active_count=0
   
+  # Process each file once instead of multiple times
   for file in "${files[@]}"; do
     local month=$(basename "$file" .md)
-    local count=$(grep -c "^## Coding Session" "$file")
+    local count=0
     
+    # Read the file once and count entries
+    while IFS= read -r line; do
+      if [[ "$line" =~ ^"## Coding Session" ]]; then
+        ((count++))
+      fi
+    done < "$file"
+    
+    # Update our statistics
+    total_entries=$((total_entries + count))
+    
+    # Check if this is the most active month
     if [[ $count -gt $most_active_count ]]; then
       most_active_month=$month
       most_active_count=$count
     fi
   done
+  
+  echo "Total coding journal entries: $total_entries"
   
   if [[ -n "$most_active_month" ]]; then
     local display_month=$(format_month "$most_active_month")

@@ -18,7 +18,7 @@ if [[ -f "$UTILS_SCRIPT" ]]; then
 else
   echo "Warning: Utility script not found at $UTILS_SCRIPT"
   # Fallback for critical functions
-  function print_line() { echo "----------------------"; }
+  # function print_line() { echo "----------------------"; }
   function log_error() { echo "ERROR: $1" >&2; }
   function log_info() { echo "INFO: $1"; }
   function log_warning() { echo "WARNING: $1"; }

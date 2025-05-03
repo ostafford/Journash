@@ -16,10 +16,33 @@ UTILS_SCRIPT="$BIN_DIR/journal_utils.sh"
 GIT_SCRIPT="$BIN_DIR/journal_git.sh"
 
 # Source component scripts
-source "$BIN_DIR/journal_entry.sh"
-source "$BIN_DIR/journal_view.sh"
-source "$BIN_DIR/journal_search.sh"
-source "$BIN_DIR/journal_stats.sh"
+# if [[ -f "$BIN_DIR/journal_entry.sh" ]]; then
+  source "$BIN_DIR/journal_entry.sh"
+# else
+#   echo "Error: journal_entry.sh not found at $BIN_DIR/journal_entry.sh"
+#   exit 1
+# fi
+
+# if [[ -f "$BIN_DIR/journal_view.sh" ]]; then
+  source "$BIN_DIR/journal_view.sh"
+# else
+#   echo "Error: journal_view.sh not found at $BIN_DIR/journal_view.sh"
+#   exit 1
+# fi
+
+# if [[ -f "$BIN_DIR/journal_search.sh" ]]; then
+  source "$BIN_DIR/journal_search.sh"
+# else
+#   echo "Error: journal_search.sh not found at $BIN_DIR/journal_search.sh"
+#   exit 1
+# fi
+
+# if [[ -f "$BIN_DIR/journal_stats.sh" ]]; then
+  source "$BIN_DIR/journal_stats.sh"
+# else
+#   echo "Error: journal_stats.sh not found at $BIN_DIR/journal_stats.sh"
+#   exit 1
+# fi
 
 # =========================
 # Display help information
@@ -39,11 +62,11 @@ function show_help() {
   echo "  help                Show this help message"
   echo ""
   echo "Examples:"
-  echo "  journash                   # Create a coding journal entry"
-  echo "  journash view              # List all available journals"
-  echo "  journash view 2025-04      # View entries from April 2025"
-  echo "  journash search \"python\"   # Search for entries containing 'python'"
-  echo "  journash git init          # Initialize git repository for backups"
+  echo "  journash                      # Create a coding journal entry"
+  echo "  journash view                 # List all available journals"
+  echo "  journash view 01-05-2025      # View entries from 1st May 2025"
+  echo "  journash search \"python\"    # Search for entries containing 'python'"
+  echo "  journash git init             # Initialize git repository for backups"
   exit 0
 }
 

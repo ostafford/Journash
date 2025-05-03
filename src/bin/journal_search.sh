@@ -60,28 +60,48 @@ function search_entries() {
     # Extract month from filename
     local month=$(basename "$file" .md)
     local display_month=$(format_month "$month")
-  
     
-    # Search for term in the file and get matching lines with context
-    local matches=$(grep -n -A 2 -B 2 -i "$search_term" "$file")
+    # Read the file once into an array (Zsh compatible way)
+    local file_lines=("${(f)$(< "$file")}")
+    local line_count=${#file_lines[@]}
+    local found_match=false
     
-    if [[ -n "$matches" ]]; then
-      echo "📔 Results from $display_month:"
-      echo "----------------------------"
-      # Format and display matches
-      echo "$matches" | while read -r line; do
-        if [[ "$line" == "--" ]]; then
-          echo "..."
-        else
-          local line_num=$(echo "$line" | cut -d: -f1)
-          local content=$(echo "$line" | cut -d: -f2-)
-          
-          # Use simplified highlighting approach for better cross-platform compatibility
-          echo "  Line $line_num: $content"
+    # Process the file and look for matches
+    for ((i=1; i<=line_count; i++)); do
+      local line="${file_lines[i]}"
+      
+      # Case-insensitive search (Zsh way)
+      if [[ "${line:l}" == *"${search_term:l}"* ]]; then
+        # If this is the first match in this file, print the header
+        if [[ "$found_match" == "false" ]]; then
+          echo "📔 Results from $display_month:"
+          echo "----------------------------"
+          found_match=true
+          results_found=true
         fi
-      done
+        
+        # Print matching line with context (2 lines before and after)
+        echo "  Line $i: $line"
+        
+        # Print context lines before
+        for ((j=i-2; j<i; j++)); do
+          if [[ $j -ge 1 ]]; then
+            echo "    Context: ${file_lines[j]}"
+          fi
+        done
+        
+        # Print context lines after
+        for ((j=i+1; j<=i+2 && j<=line_count; j++)); do
+          echo "    Context: ${file_lines[j]}"
+        done
+        
+        echo "..." # Separator between matches
+      fi
+    done
+    
+    # Add a blank line after results from this file
+    if [[ "$found_match" == "true" ]]; then
       echo ""
-      results_found=true
     fi
   done
   
