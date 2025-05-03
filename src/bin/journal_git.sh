@@ -18,26 +18,42 @@ if [[ -f "$UTILS_SCRIPT" ]]; then
 else
   echo "Warning: Utility script not found at $UTILS_SCRIPT"
   # Fallback for critical functions
-  function print_line() { echo "----------------------"; }
+  # function print_line() { echo "----------------------"; }
+  function log_error() { echo "ERROR: $1" >&2; }
+  function log_info() { echo "INFO: $1"; }
+  function log_warning() { echo "WARNING: $1"; }
+  function log_debug() { if [[ "${DEBUG:-false}" == "true" ]]; then echo "DEBUG: $1"; fi; }
+  function command_exists() { command -v "$1" &> /dev/null; }
+  function safe_exec() { 
+    eval "$1"
+    if [[ $? -ne 0 ]]; then echo "ERROR: ${2:-Command failed: $1}" >&2; return 1; fi
+    return 0
+  }
 fi
 
 # Source settings if they exist
 if [[ -f "$SETTINGS_FILE" ]]; then
   source "$SETTINGS_FILE"
 else
-  echo "Error: Settings file not found. Please run setup script first."
+  log_error "Settings file not found. Please run setup script first."
   exit 1
 fi
 
 # Source git configuration if it exists
 if [[ -f "$GIT_CONFIG_FILE" ]]; then
   source "$GIT_CONFIG_FILE"
+else
+  log_warning "Git configuration file not found. Using default settings."
+  GIT_ENABLED="false"
+  GIT_AUTO_COMMIT="false"
+  GIT_AUTO_PUSH="false"
+  GIT_REMOTE_URL=""
 fi
 
 # Function to check if git is available
 function check_git_available() {
-  if ! command -v git &> /dev/null; then
-    echo "❌ Git is not installed. Git integration is not available."
+  if ! command_exists "git"; then
+    log_error "Git is not installed. Git integration is not available."
     return 1
   fi
   
@@ -52,20 +68,25 @@ function init_repository() {
   fi
   
   # Change to journal directory
-  cd "$JOURNAL_DIR" || return 1
+  if ! cd "$JOURNAL_DIR"; then
+    log_error "Failed to change to journal directory: $JOURNAL_DIR"
+    return 1
+  fi
   
   # Check if git repo already exists
   if [[ -d ".git" ]]; then
-    echo "Git repository already exists in $JOURNAL_DIR"
+    log_info "Git repository already exists in $JOURNAL_DIR"
     return 0
   fi
   
   # Initialize git repository
-  echo "Initializing git repository in $JOURNAL_DIR..."
-  git init
+  log_info "Initializing git repository in $JOURNAL_DIR..."
+  if ! safe_exec "git init -b main" "Failed to initialize git repository"; then
+    return 1
+  fi
   
   # Create .gitignore file
-  echo "Creating .gitignore file..."
+  log_info "Creating .gitignore file..."
   cat > ".gitignore" << EOF
 # Journash .gitignore
 
@@ -74,73 +95,96 @@ function init_repository() {
 *.tmp
 *~
 
+# Ignore log file
+journash.log
+
 # Ignore security-related files (optional)
 # Uncomment the following line to exclude security configuration
 # config/security.conf
 EOF
   
   # Create initial commit
-  git add .
-  git commit -m "Initial commit - Journash setup"
+  if ! safe_exec "git add ." "Failed to stage files"; then
+    return 1
+  fi
+  
+  if ! safe_exec "git commit -m \"Initial commit - Journash setup\"" "Failed to create initial commit"; then
+    return 1
+  fi
+
+  # # Rename the default branch to main
+  # if ! safe_exec "git branch -M main" "Failed to rename branch to main"; then
+  #   log_warning "Could not rename branch to 'main', using default branch name"
+  # else
+  #   log_info "Default branch renamed to 'main'"
+  # fi
   
   # Create git configuration file
-  echo "Creating git configuration file..."
+  log_info "Creating git configuration file..."
   cat > "$GIT_CONFIG_FILE" << EOF
 # Journash Git Configuration
 
 # Git Settings
 GIT_ENABLED=true              # Enable/disable git integration
 GIT_AUTO_COMMIT=true          # Automatically commit changes
+GIT_AUTO_PUSH=false           # Automatically push changes
 GIT_REMOTE_URL=""             # Remote repository URL (optional)
 EOF
   
   source "$GIT_CONFIG_FILE"
   
-  echo "✅ Git repository initialized successfully!"
-  echo "You can now use 'journash git' commands to manage your journal backups."
+  log_info "✅ Git repository initialized successfully!"
+  log_info "You can now use 'journash git' commands to manage your journal backups."
+  
+  return 0
 }
 
 # Function to commit changes
 function commit_changes() {
   # Check if git is enabled
   if [[ "$GIT_ENABLED" != "true" ]]; then
-    echo "Git integration is disabled."
-    echo "To enable, set GIT_ENABLED=true in $GIT_CONFIG_FILE"
+    log_warning "Git integration is disabled. To enable, set GIT_ENABLED=true in $GIT_CONFIG_FILE"
     return 1
   fi
   
   # Change to journal directory
-  cd "$JOURNAL_DIR" || return 1
+  if ! cd "$JOURNAL_DIR"; then
+    log_error "Failed to change to journal directory: $JOURNAL_DIR"
+    return 1
+  fi
   
   # Check if git repo exists
   if [[ ! -d ".git" ]]; then
-    echo "Git repository not found. Initializing..."
-    init_repository
+    log_warning "Git repository not found. Initializing..."
+    if ! init_repository; then
+      return 1
+    fi
   fi
   
   # Check for changes
   if [[ -z "$(git status --porcelain)" ]]; then
-    echo "No changes to commit."
+    log_info "No changes to commit."
     return 0
   fi
   
   # Add all changes
-  git add .
+  if ! safe_exec "git add ." "Failed to stage changes"; then
+    return 1
+  fi
   
   # Commit with timestamp
-  git commit -m "Journal update - $(date +"%Y-%m-%d %H:%M")"
+  if ! safe_exec "git commit -m \"Journal update - $(date +"%d-%m-%Y %H:%M")\"" "Failed to commit changes"; then
+    return 1
+  fi
   
-  echo "✅ Changes committed successfully!"
+  log_info "✅ Changes committed successfully!"
   
   # Push to remote if configured
   if [[ -n "$GIT_REMOTE_URL" && "$GIT_AUTO_PUSH" == "true" ]]; then
-    git push origin master 2>/dev/null || git push origin main 2>/dev/null
-    if [[ $? -eq 0 ]]; then
-      echo "✅ Changes pushed to remote repository."
-    else
-      echo "❌ Failed to push to remote repository."
-    fi
+    push_changes
   fi
+  
+  return 0
 }
 
 # Function to set up remote repository
@@ -149,90 +193,118 @@ function setup_remote() {
   
   # Check if git is enabled
   if [[ "$GIT_ENABLED" != "true" ]]; then
-    echo "Git integration is disabled."
-    echo "To enable, set GIT_ENABLED=true in $GIT_CONFIG_FILE"
+    log_warning "Git integration is disabled. To enable, set GIT_ENABLED=true in $GIT_CONFIG_FILE"
     return 1
   fi
   
   # Change to journal directory
-  cd "$JOURNAL_DIR" || return 1
+  if ! cd "$JOURNAL_DIR"; then
+    log_error "Failed to change to journal directory: $JOURNAL_DIR"
+    return 1
+  fi
   
   # Check if git repo exists
   if [[ ! -d ".git" ]]; then
-    echo "Git repository not found. Initializing..."
-    init_repository
+    log_warning "Git repository not found. Initializing..."
+    if ! init_repository; then
+      return 1
+    fi
   fi
   
   # Check if remote URL is provided
   if [[ -z "$remote_url" ]]; then
-    echo "Please provide a remote repository URL."
-    echo "Example: journash git remote https://github.com/username/journal.git"
+    log_error "Please provide a remote repository URL."
+    log_error "Example: journash git remote https://github.com/username/journal.git"
     return 1
   fi
   
   # Set remote URL
-  echo "Setting remote repository URL to $remote_url..."
+  log_info "Setting remote repository URL to $remote_url..."
   git remote remove origin 2>/dev/null
-  git remote add origin "$remote_url"
+  
+  if ! safe_exec "git remote add origin \"$remote_url\"" "Failed to add remote repository"; then
+    return 1
+  fi
   
   # Update git configuration
   sed -i.bak "s|^GIT_REMOTE_URL=.*|GIT_REMOTE_URL=\"$remote_url\"|" "$GIT_CONFIG_FILE"
   
-  echo "✅ Remote repository configured successfully!"
+  log_info "✅ Remote repository configured successfully!"
   echo "Would you like to enable automatic pushing? (y/n)"
   read enable_push
   
   if [[ "$enable_push" == "y" || "$enable_push" == "Y" ]]; then
-    sed -i.bak "s/^# GIT_AUTO_PUSH=.*/GIT_AUTO_PUSH=true/" "$GIT_CONFIG_FILE"
-    if ! grep -q "GIT_AUTO_PUSH" "$GIT_CONFIG_FILE"; then
+    # Use pattern replacement to update or add the auto push setting
+    if grep -q "^GIT_AUTO_PUSH=" "$GIT_CONFIG_FILE"; then
+      sed -i.bak "s/^GIT_AUTO_PUSH=.*/GIT_AUTO_PUSH=true/" "$GIT_CONFIG_FILE"
+    else
       echo "GIT_AUTO_PUSH=true" >> "$GIT_CONFIG_FILE"
     fi
-    echo "✅ Automatic pushing enabled."
+    log_info "✅ Automatic pushing enabled."
   else
-    sed -i.bak "s/^# GIT_AUTO_PUSH=.*/GIT_AUTO_PUSH=false/" "$GIT_CONFIG_FILE"
-    if ! grep -q "GIT_AUTO_PUSH" "$GIT_CONFIG_FILE"; then
+    if grep -q "^GIT_AUTO_PUSH=" "$GIT_CONFIG_FILE"; then
+      sed -i.bak "s/^GIT_AUTO_PUSH=.*/GIT_AUTO_PUSH=false/" "$GIT_CONFIG_FILE"
+    else
       echo "GIT_AUTO_PUSH=false" >> "$GIT_CONFIG_FILE"
     fi
-    echo "Automatic pushing disabled."
+    log_info "Automatic pushing disabled."
   fi
   
+  # Clean up backup file
+  rm -f "$GIT_CONFIG_FILE.bak"
+  
   # Try initial push
-  echo "Attempting initial push to remote repository..."
-  git push -u origin master 2>/dev/null || git push -u origin main 2>/dev/null
-  if [[ $? -eq 0 ]]; then
-    echo "✅ Initial push successful!"
-  else
-    echo "❌ Initial push failed. Please check your remote URL and credentials."
-    echo "You can try pushing manually later with 'journash git push'."
-  fi
+  log_info "Attempting initial push to remote repository..."
+  push_changes
+  
+  return 0
 }
 
 # Function to push changes to remote
 function push_changes() {
   # Check if git is enabled
   if [[ "$GIT_ENABLED" != "true" ]]; then
-    echo "Git integration is disabled."
-    echo "To enable, set GIT_ENABLED=true in $GIT_CONFIG_FILE"
+    log_warning "Git integration is disabled. To enable, set GIT_ENABLED=true in $GIT_CONFIG_FILE"
     return 1
   fi
   
   # Change to journal directory
-  cd "$JOURNAL_DIR" || return 1
-  
-  # Check if remote is configured
-  if [[ -z "$GIT_REMOTE_URL" ]]; then
-    echo "Remote repository is not configured."
-    echo "Please set up a remote repository first with 'journash git remote <url>'."
+  if ! cd "$JOURNAL_DIR"; then
+    log_error "Failed to change to journal directory: $JOURNAL_DIR"
     return 1
   fi
   
+  # Check if remote is configured
+  if [[ -z "$GIT_REMOTE_URL" ]]; then
+    log_warning "Remote repository is not configured."
+    log_warning "Please set up a remote repository first with 'journash git remote <url>'."
+    return 1
+  fi
+  
+  # Try to detect current branch
+  local current_branch=$(git symbolic-ref --short HEAD 2>/dev/null || echo "main")
+  
   # Push to remote
-  echo "Pushing changes to remote repository..."
-  git push origin master 2>/dev/null || git push origin main 2>/dev/null
-  if [[ $? -eq 0 ]]; then
-    echo "✅ Changes pushed successfully!"
+  log_info "Pushing changes to remote repository..."
+  if git push origin "$current_branch" 2>/dev/null; then
+    log_info "✅ Changes pushed successfully!"
+    return 0
   else
-    echo "❌ Failed to push changes. Please check your remote URL and credentials."
+    # Try alternate branch name if fails
+    if [[ "$current_branch" == "main" ]]; then
+      if git push origin main 2>/dev/null; then
+        log_info "✅ Changes pushed successfully to 'main' branch!"
+        return 0
+      fi
+    elif [[ "$current_branch" == "main" ]]; then
+      if git push origin main 2>/dev/null; then
+        log_info "✅ Changes pushed successfully to 'main' branch!"
+        return 0
+      fi
+    fi
+    
+    log_error "Failed to push changes. Please check your remote URL and credentials."
+    return 1
   fi
 }
 
@@ -240,18 +312,22 @@ function push_changes() {
 function show_status() {
   # Check if git is enabled
   if [[ "$GIT_ENABLED" != "true" ]]; then
-    echo "Git integration is disabled."
-    echo "To enable, set GIT_ENABLED=true in $GIT_CONFIG_FILE"
+    log_warning "Git integration is disabled. To enable, set GIT_ENABLED=true in $GIT_CONFIG_FILE"
     return 1
   fi
   
   # Change to journal directory
-  cd "$JOURNAL_DIR" || return 1
+  if ! cd "$JOURNAL_DIR"; then
+    log_error "Failed to change to journal directory: $JOURNAL_DIR"
+    return 1
+  fi
   
   # Check if git repo exists
   if [[ ! -d ".git" ]]; then
-    echo "Git repository not found. Initializing..."
-    init_repository
+    log_warning "Git repository not found. Initializing..."
+    if ! init_repository; then
+      return 1
+    fi
   fi
   
   # Show status
@@ -265,6 +341,14 @@ function show_status() {
     echo "Remote URL: Not configured"
   fi
   
+  # Show current branch
+  local current_branch=$(git symbolic-ref --short HEAD 2>/dev/null || echo "Unknown")
+  echo "Current branch: $current_branch"
+  
+  # Show auto-commit and auto-push status
+  echo "Auto-commit: $GIT_AUTO_COMMIT"
+  echo "Auto-push: ${GIT_AUTO_PUSH:-false}"
+  
   # Show uncommitted changes
   echo ""
   echo "Uncommitted changes:"
@@ -274,6 +358,8 @@ function show_status() {
   echo ""
   echo "Recent commits:"
   git log --oneline -n 5
+  
+  return 0
 }
 
 # Process command line arguments
@@ -291,9 +377,9 @@ if [[ $# -eq 0 || "$1" == "help" ]]; then
   echo "  help              Show this help message"
   echo ""
   echo "Examples:"
-  echo "  journash git init                                       # Initialize git repository"
-  echo "  journash git remote https://github.com/username/repo.git # Set up remote repository"
-  echo "  journash git commit                                     # Commit changes"
+  echo "  journash git init                                         # Initialize git repository"
+  echo "  journash git remote https://github.com/username/repo.git  # Set up remote repository"
+  echo "  journash git commit                                       # Commit changes"
 elif [[ "$1" == "init" ]]; then
   init_repository
 elif [[ "$1" == "commit" ]]; then
@@ -305,7 +391,7 @@ elif [[ "$1" == "push" ]]; then
 elif [[ "$1" == "status" ]]; then
   show_status
 else
-  echo "Unknown command: $1"
-  echo "Try 'journash git help' for more information."
+  log_error "Unknown command: $1"
+  log_error "Type 'journash git help' for more information."
   exit 1
 fi
