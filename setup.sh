@@ -1,7 +1,55 @@
 #!/bin/zsh
 
-# Journash - Coding Journal CLI
-# Setup script to establish directory structure
+# ===========================================
+# Journash - Coding Journal CLI Setup Script
+# ===========================================
+
+# Constants
+EXIT_SUCCESS=0
+EXIT_FAILURE=1
+
+# ===========================================
+# Error Handling Functions
+# ===========================================
+
+# Display error message and exit 
+# Usage: handle_error <message> [exit_code]
+# Parameters:
+#   message - Error message to display
+#   exit_code - Optional exit code, defaults to 1
+function handle_error() {
+  local message="$1"
+  local exit_code="${2:-$EXIT_FAILURE}"
+  
+  echo "❌ ERROR: $message" >&2
+  exit "$exit_code"
+}
+
+# Display warning message but continue execution
+# Usage: show_warning <message>
+# Parameters:
+#   message - Warning message to display
+function show_warning() {
+  local message="$1"
+  echo "⚠️ WARNING: $message"
+}
+
+# Execute command safely with error handling
+# Usage: safe_execute <command> <error_message>
+# Parameters:
+#   command - The command to execute
+#   error_message - Message to display if command fails
+# Returns: 0 on success, exits script on failure
+function safe_execute() {
+  local command="$1"
+  local error_message="$2"
+  
+  eval "$command"
+  if [[ $? -ne 0 ]]; then
+    handle_error "$error_message"
+  fi
+  return $EXIT_SUCCESS
+}
 
 echo "🚀 Setting up Journash - Coding Journal CLI..."
 
@@ -11,7 +59,7 @@ JOURNAL_DIR="$HOME/.coding_journal"
 # Create main directory if it doesn't exist
 if [[ ! -d "$JOURNAL_DIR" ]]; then
   echo "Creating main directory: $JOURNAL_DIR"
-  mkdir -p "$JOURNAL_DIR"
+  safe_execute "mkdir -p \"$JOURNAL_DIR\"" "Failed to create journal directory: $JOURNAL_DIR"
 else
   echo "Main directory already exists: $JOURNAL_DIR"
 fi
@@ -20,7 +68,7 @@ fi
 for dir in "bin" "data" "config"; do
   if [[ ! -d "$JOURNAL_DIR/$dir" ]]; then
     echo "Creating directory: $JOURNAL_DIR/$dir"
-    mkdir -p "$JOURNAL_DIR/$dir"
+    safe_execute "mkdir -p \"$JOURNAL_DIR/$dir\"" "Failed to create directory: $JOURNAL_DIR/$dir"
   else
     echo "Directory already exists: $JOURNAL_DIR/$dir"
   fi
@@ -38,13 +86,24 @@ IDE_COMMAND="cursor"        # Command to open the IDE
 IDE_ARGS="--wait"           # Arguments for the IDE command
 TERMINAL_EMULATOR="iterm"   # Terminal emulator
 
+# Error Handling Settings
+LOG_LEVEL=0                 # 0=INFO, 1=WARNING, 2=ERROR, 3=FATAL
+LOG_FILE="$JOURNAL_DIR/journash.log"
+
 # Journal Settings
 AUTO_JOURNAL_ENABLED=true           # Enable/disable auto-journaling after IDE closes
 JOURNAL_FILE_FORMAT="%d-%m-%Y.md"   # Date format for journal files
 
+# Terminal Settings
+TERMINAL_WIDTH=80                   # Default terminal width for formatting
+
 # Appearance
 PROMPT_SYMBOL="📝"                  # Symbol to use in journal prompts
 EOF
+  
+  if [[ $? -ne 0 ]]; then
+    handle_error "Failed to create settings file: $SETTINGS_FILE"
+  fi
   echo "Default settings configured."
 else
   echo "Settings file already exists: $SETTINGS_FILE"
@@ -56,9 +115,10 @@ SCRIPT_FILES=(
   "journal_utils.sh"
   "journal_git.sh"
   "journal_entry.sh"
-  "journal_view.sh"
+  "journal_view.sh" 
   "journal_search.sh"
   "journal_stats.sh"
+  "zsh_integration.sh"
 )
 
 for script in "${SCRIPT_FILES[@]}"; do
@@ -67,11 +127,10 @@ for script in "${SCRIPT_FILES[@]}"; do
   
   if [[ -f "$SRC_SCRIPT" ]]; then
     echo "Copying $script to: $DEST_SCRIPT"
-    cp "$SRC_SCRIPT" "$DEST_SCRIPT"
-    chmod +x "$DEST_SCRIPT"
+    safe_execute "cp \"$SRC_SCRIPT\" \"$DEST_SCRIPT\"" "Failed to copy script: $SRC_SCRIPT"
+    safe_execute "chmod +x \"$DEST_SCRIPT\"" "Failed to make script executable: $DEST_SCRIPT"
   else
-    echo "Warning: Script not found at $SRC_SCRIPT"
-    echo "Please create the script file first."
+    show_warning "Script not found at $SRC_SCRIPT. Please create the script file first."
   fi
 done
 
@@ -79,143 +138,29 @@ done
 if ! grep -q "# Journash Integration" "$HOME/.zshrc"; then
   echo "Setting up Zsh integration..."
   
-  # Add integration to zshrc
-  cat >> "$HOME/.zshrc" << 'EOF'
-
-# Journash Integration
-# Function to allow 'journash' command
-function journash() {
-  "$HOME/.coding_journal/bin/journal_main.sh" "$@"
-}
-
-function code_journal() {
-  # Source utility script for OS detection if available
-  if [[ -f "$HOME/.coding_journal/bin/journal_utils.sh" ]]; then
-    source "$HOME/.coding_journal/bin/journal_utils.sh"
-  else
-    function detect_os() { 
-      if [[ "$(uname)" == "Darwin" ]]; then echo "macos"; else echo "linux"; fi 
-    }
-  fi
-  
-  # Source settings for IDE preferences
-  if [[ -f "$HOME/.coding_journal/config/settings.conf" ]]; then
-    source "$HOME/.coding_journal/config/settings.conf"
-  else
-    # Default settings if not found
-    IDE_COMMAND="cursor"
-    IDE_ARGS="--wait"
-    TERMINAL_EMULATOR="iterm"
-  fi
-  
-  # Function to display post-IDE message and trigger journal
-  function post_ide_journal() {
-    clear
-    echo -e "\033[1;36m=============================\033[0m"
-    echo -e "\033[1;32m ✨ Coding session completed \033[0m"
-    echo -e "\033[1;36m=============================\033[0m"
-    echo ""
-    journash --post-ide
-  }
-
-  # Run the IDE opening and journal process in the background
-  (
-    # Create a trap to ensure temporary files are cleaned up
-    function cleanup_temp_files() {
-      if [[ -n "$tmp_script" && -f "$tmp_script" ]]; then
-        rm -f "$tmp_script"
-      fi
-    }
-    # Set trap to call cleanup function on exit, interrupt, or termination
-    trap cleanup_temp_files EXIT INT TERM
-    
-    # Open the IDE with the configured command
-    $IDE_COMMAND $IDE_ARGS "$@"
-    
-    # After IDE closes, open a terminal for journaling based on OS
-    local os=$(detect_os)
-    
-    if [[ "$os" == "macos" ]]; then
-      # macOS using AppleScript
-      if [[ "$TERMINAL_EMULATOR" == "iterm" ]]; then
-        # Create a temporary script file securely
-        tmp_script=$(mktemp "${TMPDIR:-/tmp}/journash_post_ide_XXXXXX.sh")
-        
-        # Make it executable
-        chmod 700 "$tmp_script"
-        
-        # Add content to the script - FIXED the nested cat issue
-        cat > "$tmp_script" << EOFSCRIPT
-#!/bin/zsh
-clear
-echo -e "\033[1;36m=============================\033[0m"
-echo -e "\033[1;32m ✨ Coding session completed \033[0m"
-echo -e "\033[1;36m=============================\033[0m"
-echo ""
-EOFSCRIPT
-        
-        # Launch iTerm with the script
-        osascript -e "tell application \"iTerm\"
-          create window with default profile
-          tell current window
-            tell current session
-              write text \"$tmp_script; journash --post-ide\"
-            end tell
-          end tell
-        end tell"
-        
-        # Small delay to ensure the script has been loaded
-        sleep 1
-        
-        # Cleanup is handled by the trap, we don't need to manually remove it here
-      elif [[ "$TERMINAL_EMULATOR" == "terminal" ]]; then
-        # Alternative for Terminal.app
-        osascript -e "tell application \"Terminal\" to do script \"journash --post-ide\""
-      else
-        # Fallback to command line
-        post_ide_journal
-      fi
-    else
-      # Linux using various terminal emulators
-      if [[ "$TERMINAL_EMULATOR" == "gnome-terminal" ]]; then
-        gnome-terminal -- bash -c "$(declare -f post_ide_journal); post_ide_journal; exec bash"
-      elif [[ "$TERMINAL_EMULATOR" == "konsole" ]]; then
-        konsole --noclose -e bash -c "$(declare -f post_ide_journal); post_ide_journal"
-      elif [[ "$TERMINAL_EMULATOR" == "xterm" ]]; then
-        xterm -e "$(declare -f post_ide_journal); post_ide_journal; bash"
-      else
-        # Fallback to command line
-        post_ide_journal
-      fi
-    fi
-  ) &
-  
-  # Disown the process so it continues running even if terminal is closed
-  disown
-  
-  echo "IDE launched in background. Journal entry will be prompted when IDE closes."
-}
-# End Journash Integration
-
-EOF
-
-  echo "✅ Zsh integration complete!"
-  echo "Please restart your terminal or run 'source ~/.zshrc' to apply changes."
+  # Call the dedicated zsh integration script instead of embedding it here
+  safe_execute "$JOURNAL_DIR/bin/zsh_integration.sh" "Failed to set up Zsh integration"
 else
   echo "Journash integration already exists in ~/.zshrc"
 fi
 
-
 # Test system compatibility
 echo "Testing system compatibility..."
-"$JOURNAL_DIR/bin/journal_utils.sh"
+if [[ -f "$JOURNAL_DIR/bin/journal_utils.sh" ]]; then
+  "$JOURNAL_DIR/bin/journal_utils.sh"
+  if [[ $? -ne 0 ]]; then
+    show_warning "System compatibility check failed. Some features may not work correctly."
+  fi
+else
+  show_warning "Utility script not found. Cannot test system compatibility."
+fi
 
 # Check for required utilities
 echo "Checking for required utilities..."
 
 # Check for Git (required for version control)
 if ! command -v git &> /dev/null; then
-  echo "⚠️ Warning: Git is not installed. Version control features will not be available."
+  show_warning "Git is not installed. Version control features will not be available."
   echo "Please install Git to use backup and versioning features."
 else
   echo "✅ Git is available. Version control features can be used."
@@ -229,8 +174,9 @@ read setup_git
 if [[ "$setup_git" == "y" || "$setup_git" == "Y" ]]; then
   # Check if Git is available
   if command -v git &> /dev/null; then
-    "$JOURNAL_DIR/bin/journal_git.sh" init
-    
+    if ! "$JOURNAL_DIR/bin/journal_git.sh" init; then
+      show_warning "Failed to initialize Git repository. You can run 'journash git init' later."
+    fi
     
     echo "Would you like to set up a remote repository for cloud backup? (y/n)"
     read setup_remote
@@ -240,11 +186,13 @@ if [[ "$setup_git" == "y" || "$setup_git" == "Y" ]]; then
       read remote_url
       
       if [[ -n "$remote_url" ]]; then
-        "$JOURNAL_DIR/bin/journal_git.sh" remote "$remote_url"
+        if ! "$JOURNAL_DIR/bin/journal_git.sh" remote "$remote_url"; then
+          show_warning "Failed to set up remote repository. You can run 'journash git remote $remote_url' later."
+        fi
       fi
     fi
   else
-    echo "❌ Cannot set up Git repository: Git is not installed."
+    show_warning "Cannot set up Git repository: Git is not installed."
     echo "Please install Git and run 'journash git init' later."
   fi
 fi
@@ -261,3 +209,5 @@ echo ""
 echo "For automatic journaling when closing your IDE:"
 echo "  Use 'code_journal' instead of your normal IDE command to launch your IDE"
 echo "  For example: code_journal ~/projects/my-project-name"
+
+exit $EXIT_SUCCESS

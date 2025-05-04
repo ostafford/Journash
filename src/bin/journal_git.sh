@@ -1,9 +1,17 @@
 #!/bin/zsh
 
+# ===========================================
 # Journash - Coding Journal CLI
 # Git integration for automatic backups
+# ===========================================
 
+# Constants
+EXIT_SUCCESS=0
+EXIT_FAILURE=1
+
+# ===========================================
 # Configuration variables
+# ===========================================
 JOURNAL_DIR="$HOME/.coding_journal"
 CONFIG_DIR="$JOURNAL_DIR/config"
 DATA_DIR="$JOURNAL_DIR/data"
@@ -12,37 +20,69 @@ SETTINGS_FILE="$CONFIG_DIR/settings.conf"
 UTILS_SCRIPT="$BIN_DIR/journal_utils.sh"
 GIT_CONFIG_FILE="$CONFIG_DIR/git.conf"
 
-# Source utility functions if available
-if [[ -f "$UTILS_SCRIPT" ]]; then
-  source "$UTILS_SCRIPT"
-else
-  echo "Warning: Utility script not found at $UTILS_SCRIPT"
+# ===========================================
+# Helper functions
+# ===========================================
+
+# Source file if it exists, otherwise handle error
+# Usage: source_file <file_path> <error_message> [required]
+# Parameters:
+#   file_path - Path to the file to source
+#   error_message - Message to display if file is missing
+#   required - If "true", exit on error; otherwise just warn (default: "true")
+# Returns: 0 on success, exits or returns 1 on failure
+function source_file() {
+  local file_path="$1"
+  local error_message="$2"
+  local required="${3:-true}"
+  
+  if [[ -f "$file_path" ]]; then
+    source "$file_path"
+    return 0
+  else
+    if [[ "$required" == "true" ]]; then
+      echo "❌ ERROR: $error_message" >&2
+      exit $EXIT_FAILURE
+    else
+      echo "⚠️ WARNING: $error_message"
+      return 1
+    fi
+  fi
+}
+
+# ===========================================
+# Initialize required dependencies
+# ===========================================
+
+# Source utility functions
+source_file "$UTILS_SCRIPT" "Utility script not found at $UTILS_SCRIPT" "false"
+if [[ $? -ne 0 ]]; then
   # Fallback for critical functions
-  # function print_line() { echo "----------------------"; }
-  function log_error() { echo "ERROR: $1" >&2; }
-  function log_info() { echo "INFO: $1"; }
-  function log_warning() { echo "WARNING: $1"; }
-  function log_debug() { if [[ "${DEBUG:-false}" == "true" ]]; then echo "DEBUG: $1"; fi; }
+  function log_error() { echo "❌ ERROR: $1" >&2; }
+  function log_info() { echo "ℹ️ INFO: $1"; }
+  function log_warning() { echo "⚠️ WARNING: $1"; }
+  function log_debug() { if [[ "${DEBUG:-false}" == "true" ]]; then echo "🔍 DEBUG: $1"; fi; }
   function command_exists() { command -v "$1" &> /dev/null; }
+  function print_line() { local width=${1:-80}; printf "%0.s-" $(seq 1 $width); echo ""; }
   function safe_exec() { 
     eval "$1"
-    if [[ $? -ne 0 ]]; then echo "ERROR: ${2:-Command failed: $1}" >&2; return 1; fi
+    if [[ $? -ne 0 ]]; then echo "❌ ERROR: ${2:-Command failed: $1}" >&2; return 1; fi
     return 0
+  }
+  function handle_error() {
+    local message="$1"
+    local exit_code="${2:-$EXIT_FAILURE}"
+    log_error "$message"
+    exit "$exit_code"
   }
 fi
 
-# Source settings if they exist
-if [[ -f "$SETTINGS_FILE" ]]; then
-  source "$SETTINGS_FILE"
-else
-  log_error "Settings file not found. Please run setup script first."
-  exit 1
-fi
+# Source settings
+source_file "$SETTINGS_FILE" "Settings file not found. Please run setup script first."
 
-# Source git configuration if it exists
-if [[ -f "$GIT_CONFIG_FILE" ]]; then
-  source "$GIT_CONFIG_FILE"
-else
+# Source git configuration
+source_file "$GIT_CONFIG_FILE" "Git configuration file not found. Using default settings." "false"
+if [[ $? -ne 0 ]]; then
   log_warning "Git configuration file not found. Using default settings."
   GIT_ENABLED="false"
   GIT_AUTO_COMMIT="false"
@@ -50,39 +90,47 @@ else
   GIT_REMOTE_URL=""
 fi
 
-# Function to check if git is available
+# ===========================================
+# Git Integration Functions
+# ===========================================
+
+# Check if git is installed and available
+# Usage: check_git_available
+# Returns: 0 if git is available, 1 if not
 function check_git_available() {
   if ! command_exists "git"; then
     log_error "Git is not installed. Git integration is not available."
-    return 1
+    return $EXIT_FAILURE
   fi
   
-  return 0
+  return $EXIT_SUCCESS
 }
 
-# Function to initialize git repository
+# Initialize git repository for journal
+# Usage: init_repository
+# Returns: 0 on success, 1 on failure
 function init_repository() {
   # Check if git is installed
   if ! check_git_available; then
-    return 1
+    return $EXIT_FAILURE
   fi
   
   # Change to journal directory
   if ! cd "$JOURNAL_DIR"; then
     log_error "Failed to change to journal directory: $JOURNAL_DIR"
-    return 1
+    return $EXIT_FAILURE
   fi
   
   # Check if git repo already exists
   if [[ -d ".git" ]]; then
     log_info "Git repository already exists in $JOURNAL_DIR"
-    return 0
+    return $EXIT_SUCCESS
   fi
   
   # Initialize git repository
   log_info "Initializing git repository in $JOURNAL_DIR..."
   if ! safe_exec "git init -b main" "Failed to initialize git repository"; then
-    return 1
+    return $EXIT_FAILURE
   fi
   
   # Create .gitignore file
@@ -105,19 +153,12 @@ EOF
   
   # Create initial commit
   if ! safe_exec "git add ." "Failed to stage files"; then
-    return 1
+    return $EXIT_FAILURE
   fi
   
   if ! safe_exec "git commit -m \"Initial commit - Journash setup\"" "Failed to create initial commit"; then
-    return 1
+    return $EXIT_FAILURE
   fi
-
-  # # Rename the default branch to main
-  # if ! safe_exec "git branch -M main" "Failed to rename branch to main"; then
-  #   log_warning "Could not rename branch to 'main', using default branch name"
-  # else
-  #   log_info "Default branch renamed to 'main'"
-  # fi
   
   # Create git configuration file
   log_info "Creating git configuration file..."
@@ -136,45 +177,47 @@ EOF
   log_info "✅ Git repository initialized successfully!"
   log_info "You can now use 'journash git' commands to manage your journal backups."
   
-  return 0
+  return $EXIT_SUCCESS
 }
 
-# Function to commit changes
+# Commit changes to git repository
+# Usage: commit_changes
+# Returns: 0 on success, 1 on failure
 function commit_changes() {
   # Check if git is enabled
   if [[ "$GIT_ENABLED" != "true" ]]; then
     log_warning "Git integration is disabled. To enable, set GIT_ENABLED=true in $GIT_CONFIG_FILE"
-    return 1
+    return $EXIT_FAILURE
   fi
   
   # Change to journal directory
   if ! cd "$JOURNAL_DIR"; then
     log_error "Failed to change to journal directory: $JOURNAL_DIR"
-    return 1
+    return $EXIT_FAILURE
   fi
   
   # Check if git repo exists
   if [[ ! -d ".git" ]]; then
     log_warning "Git repository not found. Initializing..."
     if ! init_repository; then
-      return 1
+      return $EXIT_FAILURE
     fi
   fi
   
   # Check for changes
   if [[ -z "$(git status --porcelain)" ]]; then
     log_info "No changes to commit."
-    return 0
+    return $EXIT_SUCCESS
   fi
   
   # Add all changes
   if ! safe_exec "git add ." "Failed to stage changes"; then
-    return 1
+    return $EXIT_FAILURE
   fi
   
   # Commit with timestamp
   if ! safe_exec "git commit -m \"Journal update - $(date +"%d-%m-%Y %H:%M")\"" "Failed to commit changes"; then
-    return 1
+    return $EXIT_FAILURE
   fi
   
   log_info "✅ Changes committed successfully!"
@@ -184,30 +227,34 @@ function commit_changes() {
     push_changes
   fi
   
-  return 0
+  return $EXIT_SUCCESS
 }
 
-# Function to set up remote repository
+# Set up remote repository for git
+# Usage: setup_remote <remote_url>
+# Parameters:
+#   remote_url - URL of remote repository
+# Returns: 0 on success, 1 on failure
 function setup_remote() {
   local remote_url=$1
   
   # Check if git is enabled
   if [[ "$GIT_ENABLED" != "true" ]]; then
     log_warning "Git integration is disabled. To enable, set GIT_ENABLED=true in $GIT_CONFIG_FILE"
-    return 1
+    return $EXIT_FAILURE
   fi
   
   # Change to journal directory
   if ! cd "$JOURNAL_DIR"; then
     log_error "Failed to change to journal directory: $JOURNAL_DIR"
-    return 1
+    return $EXIT_FAILURE
   fi
   
   # Check if git repo exists
   if [[ ! -d ".git" ]]; then
     log_warning "Git repository not found. Initializing..."
     if ! init_repository; then
-      return 1
+      return $EXIT_FAILURE
     fi
   fi
   
@@ -215,7 +262,7 @@ function setup_remote() {
   if [[ -z "$remote_url" ]]; then
     log_error "Please provide a remote repository URL."
     log_error "Example: journash git remote https://github.com/username/journal.git"
-    return 1
+    return $EXIT_FAILURE
   fi
   
   # Set remote URL
@@ -223,7 +270,7 @@ function setup_remote() {
   git remote remove origin 2>/dev/null
   
   if ! safe_exec "git remote add origin \"$remote_url\"" "Failed to add remote repository"; then
-    return 1
+    return $EXIT_FAILURE
   fi
   
   # Update git configuration
@@ -257,28 +304,30 @@ function setup_remote() {
   log_info "Attempting initial push to remote repository..."
   push_changes
   
-  return 0
+  return $EXIT_SUCCESS
 }
 
-# Function to push changes to remote
+# Push changes to remote repository
+# Usage: push_changes
+# Returns: 0 on success, 1 on failure
 function push_changes() {
   # Check if git is enabled
   if [[ "$GIT_ENABLED" != "true" ]]; then
     log_warning "Git integration is disabled. To enable, set GIT_ENABLED=true in $GIT_CONFIG_FILE"
-    return 1
+    return $EXIT_FAILURE
   fi
   
   # Change to journal directory
   if ! cd "$JOURNAL_DIR"; then
     log_error "Failed to change to journal directory: $JOURNAL_DIR"
-    return 1
+    return $EXIT_FAILURE
   fi
   
   # Check if remote is configured
   if [[ -z "$GIT_REMOTE_URL" ]]; then
     log_warning "Remote repository is not configured."
     log_warning "Please set up a remote repository first with 'journash git remote <url>'."
-    return 1
+    return $EXIT_FAILURE
   fi
   
   # Try to detect current branch
@@ -288,45 +337,47 @@ function push_changes() {
   log_info "Pushing changes to remote repository..."
   if git push origin "$current_branch" 2>/dev/null; then
     log_info "✅ Changes pushed successfully!"
-    return 0
+    return $EXIT_SUCCESS
   else
     # Try alternate branch name if fails
-    if [[ "$current_branch" == "main" ]]; then
-      if git push origin main 2>/dev/null; then
-        log_info "✅ Changes pushed successfully to 'main' branch!"
-        return 0
+    if [[ "$current_branch" == "main" && "$current_branch" != "master" ]]; then
+      if git push origin master 2>/dev/null; then
+        log_info "✅ Changes pushed successfully to 'master' branch!"
+        return $EXIT_SUCCESS
       fi
-    elif [[ "$current_branch" == "main" ]]; then
+    elif [[ "$current_branch" == "master" && "$current_branch" != "main" ]]; then
       if git push origin main 2>/dev/null; then
         log_info "✅ Changes pushed successfully to 'main' branch!"
-        return 0
+        return $EXIT_SUCCESS
       fi
     fi
     
     log_error "Failed to push changes. Please check your remote URL and credentials."
-    return 1
+    return $EXIT_FAILURE
   fi
 }
 
-# Function to show git status
+# Show git repository status
+# Usage: show_status
+# Returns: 0 on success, 1 on failure
 function show_status() {
   # Check if git is enabled
   if [[ "$GIT_ENABLED" != "true" ]]; then
     log_warning "Git integration is disabled. To enable, set GIT_ENABLED=true in $GIT_CONFIG_FILE"
-    return 1
+    return $EXIT_FAILURE
   fi
   
   # Change to journal directory
   if ! cd "$JOURNAL_DIR"; then
     log_error "Failed to change to journal directory: $JOURNAL_DIR"
-    return 1
+    return $EXIT_FAILURE
   fi
   
   # Check if git repo exists
   if [[ ! -d ".git" ]]; then
     log_warning "Git repository not found. Initializing..."
     if ! init_repository; then
-      return 1
+      return $EXIT_FAILURE
     fi
   fi
   
@@ -359,12 +410,13 @@ function show_status() {
   echo "Recent commits:"
   git log --oneline -n 5
   
-  return 0
+  return $EXIT_SUCCESS
 }
 
-# Process command line arguments
-if [[ $# -eq 0 || "$1" == "help" ]]; then
-  # Display help information
+# Display help information for git commands
+# Usage: show_git_help
+# Returns: Always returns 0
+function show_git_help() {
   echo "Usage: journash git [COMMAND]"
   echo "Manage git integration for journal backups."
   echo ""
@@ -380,18 +432,61 @@ if [[ $# -eq 0 || "$1" == "help" ]]; then
   echo "  journash git init                                         # Initialize git repository"
   echo "  journash git remote https://github.com/username/repo.git  # Set up remote repository"
   echo "  journash git commit                                       # Commit changes"
-elif [[ "$1" == "init" ]]; then
-  init_repository
-elif [[ "$1" == "commit" ]]; then
-  commit_changes
-elif [[ "$1" == "remote" && -n "$2" ]]; then
-  setup_remote "$2"
-elif [[ "$1" == "push" ]]; then
-  push_changes
-elif [[ "$1" == "status" ]]; then
-  show_status
-else
-  log_error "Unknown command: $1"
-  log_error "Type 'journash git help' for more information."
-  exit 1
-fi
+  
+  return $EXIT_SUCCESS
+}
+
+# ===========================================
+# Command Processing
+# ===========================================
+
+# Process git commands
+# Usage: process_git_command <command> [arguments...]
+# Parameters:
+#   command - Git subcommand to process
+#   arguments - Additional arguments for the command
+# Returns: 0 on success, non-zero on failure
+function process_git_command() {
+  if [[ $# -eq 0 || "$1" == "help" ]]; then
+    show_git_help
+    return $EXIT_SUCCESS
+  fi
+  
+  local command="$1"
+  case "$command" in
+    "init")
+      init_repository
+      ;;
+    "commit")
+      commit_changes
+      ;;
+    "remote")
+      if [[ -n "$2" ]]; then
+        setup_remote "$2"
+      else
+        log_error "Remote URL required"
+        echo "Usage: journash git remote <url>"
+        return $EXIT_FAILURE
+      fi
+      ;;
+    "push")
+      push_changes
+      ;;
+    "status")
+      show_status
+      ;;
+    *)
+      log_error "Unknown command: $command"
+      log_error "Type 'journash git help' for more information."
+      return $EXIT_FAILURE
+      ;;
+  esac
+  
+  return $?
+}
+
+# ===========================================
+# Main execution
+# ===========================================
+process_git_command "$@"
+exit $?

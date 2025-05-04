@@ -1,8 +1,8 @@
 # Journash
 
-> A terminal-based journaling system designed for developers to track their coding journey.
+> A robust terminal-based journaling system designed for developers to track their coding journey.
 
-![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)
+![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)
 ![Shell](https://img.shields.io/badge/shell-zsh-green.svg)
 ![Platform](https://img.shields.io/badge/platform-macOS%20|%20Linux-lightgrey.svg)
 
@@ -14,8 +14,9 @@ Journash is a seamless CLI journaling system that documents your coding journey:
 - Creates structured entries with predefined fields to track progress
 - Organizes entries by date in an easily navigable structure
 - Integrates with Git for version control and backup
+- Features robust error handling and cross-platform compatibility
 
-Perfect for tracking your progress through software development projects, bootcamps, or capstone projects.
+Perfect for tracking your progress through software development projects.
 
 ## 🚀 Features
 
@@ -48,6 +49,16 @@ Built-in Git support ensures your journal is safely stored and versioned:
 - Automatic commit of journal entries
 - Remote repository support for cloud backup
 - Full version control of your journal
+- Command monitoring for Git operation success
+
+### Enhanced Error Handling
+
+The system includes comprehensive error handling:
+
+- Consistent error reporting across all components
+- Automatic fallback for missing dependencies
+- Self-diagnosing troubleshooting capabilities
+- Debug mode for advanced troubleshooting
 
 ## 🛠️ Installation
 
@@ -78,10 +89,13 @@ journash
 journash view
 
 # View entries for a specific month
-journash view 2025-04
+journash view 05-2025
+
+# View entries for a specific day
+journash view 01-05-2025
 
 # Search entries for a specific term
-journash search "python"
+journash search "coding is hard"
 
 # Show journal statistics
 journash stats
@@ -92,6 +106,9 @@ journash stats
 ```bash
 # Launch your IDE with auto-journaling on close
 code_journal your_project/
+
+# Launch with debug mode enabled
+DEBUG=true code_journal your_project/
 ```
 
 When your IDE closes, a new terminal window will open to create a coding journal entry.
@@ -131,8 +148,16 @@ IDE_ARGS="--wait"           # Arguments for the IDE command
 TERMINAL_EMULATOR="iterm"   # Your terminal (iterm, gnome-terminal, etc.)
 
 # Journal Settings  
-AUTO_JOURNAL_ENABLED=true   # Enable/disable auto-journaling
-JOURNAL_FILE_FORMAT="%Y-%m.md"  # Date format for journal files
+AUTO_JOURNAL_ENABLED=true           # Enable/disable auto-journaling
+JOURNAL_FILE_FORMAT="%d-%m-%Y.md"   # Date format for journal files
+
+# Error Handling
+LOG_LEVEL=0                            # 0=INFO, 1=WARNING, 2=ERROR, 3=FATAL
+LOG_FILE="$JOURNAL_DIR/journash.log"   # Log file location
+
+# Appearance
+PROMPT_SYMBOL="📝"          # Symbol to use in journal prompts
+TERMINAL_WIDTH=80           # Default terminal width for formatting
 ```
 
 ## 📂 Project Structure
@@ -143,10 +168,14 @@ $HOME/
     ├── bin/                      # Scripts directory
     │   ├── journal_main.sh       # Main script with core functions
     │   ├── journal_utils.sh      # Utility functions
-    │   └── journal_git.sh        # Git integration
+    │   ├── journal_git.sh        # Git integration
+    │   ├── journal_entry.sh      # Entry creation functions
+    │   ├── journal_view.sh       # Entry viewing functions
+    │   ├── journal_search.sh     # Entry search functions
+    │   └── journal_stats.sh      # Statistics functions
     │
     ├── data/                     # Data directory
-    │   └── YYYY-MM.md            # Journal entries by month
+    │   └── DD-MM-YYYY.md         # Journal entries by date
     │
     └── config/                   # Configuration directory
         ├── settings.conf         # User settings
@@ -159,9 +188,16 @@ Journash is designed to work on:
 - macOS (primary platform)
 - Linux (secondary platform)
 
-The utility functions automatically detect your OS and adjust commands accordingly.
+The utility functions automatically detect your OS and adjust commands accordingly. Fallback behaviors are implemented for missing dependencies.
 
 ## 💡 Troubleshooting
+
+### Logging and Debugging
+
+Journash includes comprehensive logging capabilities:
+- All activity is logged to `~/.coding_journal/journash.log`
+- Enable debug mode with `DEBUG=true journash [command]`
+- View system compatibility with `journash test`
 
 ### Common Issues
 
@@ -178,6 +214,7 @@ The utility functions automatically detect your OS and adjust commands according
 3. **Cross-platform issues**
    - For Linux, ensure you're using a supported terminal emulator
    - Run `journash test` to check system compatibility
+   - Check the log file for details about any failures
 
 ## 🤝 Contributing
 
