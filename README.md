@@ -1,6 +1,6 @@
 # Journash
 
-> A robust terminal-based journaling system designed for developers to track their coding journey.
+> A terminal-based journaling system designed for developers to track their coding journey.
 
 ![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)
 ![Shell](https://img.shields.io/badge/shell-zsh-green.svg)
